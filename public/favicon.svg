@@ -1,21 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="fkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#10b981" />
+      <stop offset="50%" stop-color="#0d9488" />
       <stop offset="100%" stop-color="#047857" />
     </linearGradient>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a7f3d0" />
+      <stop offset="100%" stop-color="#34d399" />
+    </linearGradient>
+    <linearGradient id="doorGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#e6fcf5" />
+    </linearGradient>
     <linearGradient id="sparkleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6ee7b7" />
-      <stop offset="100%" stop-color="#ffffff" />
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#f59e0b" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="128" fill="url(#fkGrad)" />
-  <path d="M256 110C175.369 110 110 175.369 110 256C110 336.631 175.369 402 256 402C336.631 402 402 336.631 402 256C402 175.369 336.631 110 256 110Z" fill="white" fill-opacity="0.12" />
-  <!-- Refrigerator & Nutrition Leaf -->
-  <path d="M180 160C180 148.954 188.954 140 200 140H312C323.046 140 332 148.954 332 160V230H180V160Z" fill="white" />
-  <path d="M180 245H332V352C332 363.046 323.046 372 312 372H200C188.954 372 180 363.046 180 352V245Z" fill="white" />
-  <rect x="200" y="175" width="8" height="30" rx="4" fill="#047857" />
-  <rect x="200" y="270" width="8" height="45" rx="4" fill="#047857" />
-  <!-- AI Sparkle -->
-  <path d="M345 130L352 148L370 155L352 162L345 180L338 162L320 155L338 148L345 130Z" fill="url(#sparkleGrad)" />
+
+  <!-- Rounded App Icon Background -->
+  <rect width="512" height="512" rx="128" fill="url(#bgGrad)" />
+
+  <!-- Background Glow Aura -->
+  <circle cx="256" cy="256" r="160" fill="white" fill-opacity="0.1" />
+
+  <!-- Refrigerator Body -->
+  <rect x="160" y="100" width="192" height="312" rx="36" fill="url(#doorGrad)" />
+
+  <!-- Separation Line -->
+  <line x1="160" y1="220" x2="352" y2="220" stroke="#059669" stroke-width="8" stroke-linecap="round" />
+
+  <!-- Handles -->
+  <rect x="186" y="140" width="12" height="42" rx="6" fill="#047857" />
+  <rect x="186" y="250" width="12" height="60" rx="6" fill="#047857" />
+
+  <!-- Freshness Eco Leaf -->
+  <path d="M280 180C340 130 380 145 380 145C380 145 390 190 340 240C290 290 280 180 280 180Z" fill="url(#leafGrad)" />
+
+  <!-- AI Sparkles -->
+  <path d="M380 90L392 115L420 128L392 141L380 166L368 141L340 128L368 115L380 90Z" fill="url(#sparkleGrad)" />
 </svg>

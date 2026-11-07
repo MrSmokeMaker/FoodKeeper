@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie';
-import type { Product, Recipe, MealPlanItem, WeightLog, UserProfile, CategoryDefinition } from '../types';
+import type { Product, Recipe, MealPlanItem, WeightLog, UserProfile, CategoryDefinition, ShoppingItem } from '../types';
 
 export const INITIAL_CATEGORIES: CategoryDefinition[] = [
   { id: 'dairy', label: 'Молочные продукты' },
@@ -24,6 +24,7 @@ export class FoodKeeperDB extends Dexie {
   weightLogs!: Table<WeightLog, number>;
   userProfile!: Table<UserProfile, number>;
   categories!: Table<CategoryDefinition, string>;
+  shoppingList!: Table<ShoppingItem, number>;
 
   constructor() {
     super('FoodKeeperDB');
@@ -432,6 +433,15 @@ export async function seedInitialDataIfNeeded() {
 
     // 5. План питания на сегодня (4 приёма с точными граммовками)
     const todayStr = formatDate(0);
+    const shopCount = await db.shoppingList.count();
+    if (shopCount === 0) {
+      await db.shoppingList.bulkAdd([
+        { name: 'Свежий шпинат', amount: 150, unit: 'г', category: 'veg_fruit', checked: false, source: 'plan', inPantryAmount: 0, requiredAmount: 150, addedAt: todayStr },
+        { name: 'Авокадо спелый', amount: 3, unit: 'шт', category: 'veg_fruit', checked: false, source: 'plan', inPantryAmount: 0, requiredAmount: 3, addedAt: todayStr },
+        { name: 'Сёмга слабосолёная', amount: 200, unit: 'г', category: 'fish', checked: false, source: 'plan', inPantryAmount: 0, requiredAmount: 200, addedAt: todayStr },
+      ]);
+    }
+
     await db.mealPlan.bulkAdd([
       {
         date: todayStr,

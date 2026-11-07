@@ -59,12 +59,26 @@ export interface MealPlanItem {
   mealType: MealType;
   title: string;
   recipeId?: number;
+  ingredients?: RecipeIngredient[];
   calories: number;
   protein: number;
   fat: number;
   carbs: number;
   completed: boolean;
   notes?: string;
+}
+
+export interface ShoppingItem {
+  id?: number;
+  name: string;
+  amount: number;
+  unit: string;
+  category?: string;
+  checked: boolean;
+  source: 'plan' | 'manual' | 'cooking';
+  inPantryAmount?: number;
+  requiredAmount?: number;
+  addedAt: string;
 }
 
 export interface WeightLog {

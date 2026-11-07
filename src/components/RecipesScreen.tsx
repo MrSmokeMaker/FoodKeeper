@@ -5,13 +5,15 @@ import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
 import { parseRecipeFromWeb, searchOnlineRecipesViaAI } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
+import { CookConfirmModal } from './CookConfirmModal';
+import type { DeductionItem, MissingIngredientItem } from '../services/inventory';
 
 interface RecipesScreenProps {
   recipes: Recipe[];
   pantryProducts: Product[];
   profile: UserProfile;
   onAddRecipe: (recipe: Omit<Recipe, 'id' | 'createdAt'>) => Promise<void>;
-  onCookRecipe: (recipe: Recipe) => Promise<void>;
+  onCookRecipe: (recipe: Recipe, deductions?: DeductionItem[], missingToAdd?: MissingIngredientItem[]) => Promise<void>;
   onOpenPaywall: () => void;
 }
 
@@ -28,6 +30,7 @@ export const RecipesScreen = ({
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importInput, setImportInput] = useState('');
   const [importLoading, setImportLoading] = useState(false);
+  const [isCookModalOpen, setIsCookModalOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [searchCatalogQuery, setSearchCatalogQuery] = useState('');
@@ -149,10 +152,17 @@ export const RecipesScreen = ({
     }
   };
 
-  const handleCook = async (recipe: Recipe) => {
+  const handleCookStart = () => {
+    triggerHaptic('light');
+    setIsCookModalOpen(true);
+  };
+
+  const handleCookConfirm = async (deductions: DeductionItem[], missingToAdd: MissingIngredientItem[]) => {
+    if (!selectedRecipe) return;
     triggerHaptic('success');
-    await onCookRecipe(recipe);
+    await onCookRecipe(selectedRecipe, deductions, missingToAdd);
     confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    setIsCookModalOpen(false);
     setSelectedRecipe(null);
   };
 
@@ -166,7 +176,7 @@ export const RecipesScreen = ({
   });
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-28">
       {/* Шапка */}
       <div className="flex items-center justify-between">
         <div>
@@ -466,7 +476,7 @@ export const RecipesScreen = ({
                 Закрыть
               </button>
               <button
-                onClick={() => handleCook(selectedRecipe)}
+                onClick={handleCookStart}
                 className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5"
               >
                 <Utensils className="w-4 h-4" /> Я приготовил! (Списать)
@@ -474,6 +484,17 @@ export const RecipesScreen = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Модальное окно подтверждения списания продуктов */}
+      {selectedRecipe && isCookModalOpen && (
+        <CookConfirmModal
+          recipe={selectedRecipe}
+          pantry={pantryProducts}
+          isOpen={isCookModalOpen}
+          onClose={() => setIsCookModalOpen(false)}
+          onConfirm={handleCookConfirm}
+        />
       )}
 
       {/* Модальное окно импорта из интернета */}

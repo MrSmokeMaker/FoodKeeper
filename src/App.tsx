@@ -11,8 +11,16 @@ import { DashboardScreen } from './components/DashboardScreen';
 import { FridgeScreen } from './components/FridgeScreen';
 import { ScannerScreen } from './components/ScannerScreen';
 import { RecipesScreen } from './components/RecipesScreen';
-import { PlannerScreen } from './components/PlannerScreen';
+import { ShoppingListScreen } from './components/ShoppingListScreen';
 import { initTelegramApp, triggerHaptic } from './services/telegram';
+import { generateWeeklyPlanWithAI } from './services/gemini';
+import {
+  applyDeductionsToDb,
+  addMissingToShoppingList,
+  calculateDeductions,
+  type DeductionItem,
+  type MissingIngredientItem,
+} from './services/inventory';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
@@ -55,6 +63,9 @@ export function App() {
   const recipes = useLiveQuery(() => db.recipes.toArray()) || [];
   const mealPlan = useLiveQuery(() => db.mealPlan.toArray()) || [];
   const weightLogs = useLiveQuery(() => db.weightLogs.toArray()) || [];
+  const shoppingItems = useLiveQuery(() => db.shoppingList.toArray()) || [];
+
+  const pendingShoppingCount = shoppingItems.filter((i) => !i.checked).length;
 
   // Вычисление продуктов с истекающим сроком (<= 3 дней)
   const expiringProducts = products.filter((p) => {
@@ -67,9 +78,7 @@ export function App() {
     return diffDays <= 3;
   });
 
-  // Сегодняшние приемы пищи
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayMeals = mealPlan.filter((m) => m.date === todayStr);
 
   // Обработчики действий
   const handleAddProduct = async (prod: Omit<Product, 'id' | 'addedAt'>) => {
@@ -116,21 +125,27 @@ export function App() {
     });
   };
 
-  const handleCookRecipe = async (recipe: Recipe) => {
-    // Автоматическое списание продуктов из холодильника
-    for (const ing of recipe.ingredients) {
-      const match = products.find((p) =>
-        p.name.toLowerCase().includes(ing.name.toLowerCase()) ||
-        ing.name.toLowerCase().includes(p.name.toLowerCase())
-      );
-      if (match && match.id) {
-        const remaining = Math.max(0, match.quantity - ing.amount);
-        if (remaining === 0) {
-          await db.products.delete(match.id);
-        } else {
-          await db.products.update(match.id, { quantity: remaining });
-        }
+  // Автоматическое списание продуктов при готовке рецепта
+  const handleCookRecipe = async (
+    recipe: Recipe,
+    deductions?: DeductionItem[],
+    missingToAdd?: MissingIngredientItem[]
+  ) => {
+    if (deductions && deductions.length > 0) {
+      await applyDeductionsToDb(deductions);
+    } else {
+      // Авторасчет если вызвано без модалки
+      const calc = calculateDeductions(recipe.ingredients || [], products);
+      if (calc.deductions.length > 0) {
+        await applyDeductionsToDb(calc.deductions);
       }
+      if (calc.missing.length > 0) {
+        await addMissingToShoppingList(calc.missing);
+      }
+    }
+
+    if (missingToAdd && missingToAdd.length > 0) {
+      await addMissingToShoppingList(missingToAdd);
     }
 
     // Добавляем прием в сегодняшний рацион
@@ -139,6 +154,7 @@ export function App() {
       mealType: recipe.category,
       title: recipe.title,
       recipeId: recipe.id,
+      ingredients: recipe.ingredients,
       calories: recipe.calories,
       protein: recipe.protein,
       fat: recipe.fat,
@@ -155,24 +171,35 @@ export function App() {
     await db.mealPlan.bulkAdd(items);
   };
 
+  // Генерация 7-дневного плана ИИ
+  const handleGenerateWeeklyPlan = async () => {
+    const newPlan = await generateWeeklyPlanWithAI(
+      currentProfile,
+      products,
+      { proxyUrl: currentProfile.geminiProxyUrl },
+      todayStr
+    );
+    await handleUpdateMealPlan(newPlan);
+  };
+
   // Точечная замена одного блюда в плане (PRO-фича)
   const handleReplaceMeal = async (mealId: number, mealType: string, _date: string) => {
     const alternatives: Record<string, Array<{ title: string; c: number; p: number; f: number; cb: number }>> = {
       breakfast: [
-        { title: 'Глазунья с томатами и цельнозерновым тостом', c: 370, p: 24, f: 18, cb: 22 },
-        { title: 'Протеиновые блинчики с греческим йогуртом', c: 390, p: 32, f: 10, cb: 35 },
+        { title: 'Глазунья с томатами (100г) и цельнозерновым тостом (40г)', c: 370, p: 24, f: 18, cb: 22 },
+        { title: 'Протеиновые блинчики с греческим йогуртом (100г)', c: 390, p: 32, f: 10, cb: 35 },
       ],
       lunch: [
-        { title: 'Стейк из индейки с киноа и стручковой фасолью', c: 540, p: 46, f: 14, cb: 50 },
-        { title: 'Паста из твердых сортов с тунцом и оливками', c: 560, p: 42, f: 16, cb: 58 },
+        { title: 'Стейк из индейки (180г) с киноа (60г) и стручковой фасолью (120г)', c: 540, p: 46, f: 14, cb: 50 },
+        { title: 'Паста из твердых сортов (70г) с тунцом (150г) и томатами (80г)', c: 560, p: 42, f: 16, cb: 58 },
       ],
       snack: [
-        { title: 'Горсть миндаля и зеленое яблоко', c: 220, p: 7, f: 14, cb: 18 },
-        { title: 'Белковый коктейль с бананом', c: 250, p: 28, f: 3, cb: 26 },
+        { title: 'Горсть миндаля (30г) и зеленое яблоко (150г)', c: 220, p: 7, f: 14, cb: 18 },
+        { title: 'Белковый коктейль с бананом (100г) и молоком (200мл)', c: 250, p: 28, f: 3, cb: 26 },
       ],
       dinner: [
-        { title: 'Филе белой рыбы на пару с брокколи', c: 330, p: 38, f: 8, cb: 14 },
-        { title: 'Салат с креветками, авокадо и миксом зелени', c: 350, p: 30, f: 19, cb: 10 },
+        { title: 'Филе белой рыбы на пару (200г) с брокколи (150г)', c: 330, p: 38, f: 8, cb: 14 },
+        { title: 'Салат с креветками (160г), авокадо (70г) и миксом зелени (60г)', c: 350, p: 30, f: 19, cb: 10 },
       ],
     };
 
@@ -234,7 +261,10 @@ export function App() {
   const currentProfile = profile || defaultProfile;
 
   return (
-    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans transition-colors duration-200">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 via-zinc-50 to-teal-50/30 dark:bg-gradient-to-b dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans transition-colors duration-300 relative selection:bg-emerald-500/25 selection:text-emerald-500">
+      {/* Декоративные световые акценты на фоне */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-96 bg-gradient-to-b from-emerald-500/10 via-teal-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
+
       {/* Шапка */}
       <Header
         profile={currentProfile}
@@ -245,25 +275,31 @@ export function App() {
       />
 
       {/* Основной контент */}
-      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3">
+      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3.5 pb-24">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
-            initial={{ opacity: 0, y: 8 }}
+            initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.18 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.16 }}
           >
             {activeTab === 'dashboard' && (
               <DashboardScreen
                 profile={currentProfile}
-                todayMeals={todayMeals}
+                mealPlan={mealPlan}
+                pantryProducts={products}
+                recipes={recipes}
                 expiringProducts={expiringProducts}
                 weightLogs={weightLogs}
                 onToggleMeal={handleToggleMeal}
                 onAddWeight={handleAddWeight}
+                onGenerateWeeklyPlan={handleGenerateWeeklyPlan}
+                onReplaceMeal={handleReplaceMeal}
                 onNavigateToFridge={() => setActiveTab('fridge')}
                 onNavigateToRecipes={() => setActiveTab('recipes')}
+                onNavigateToShopping={() => setActiveTab('shopping')}
+                onOpenPaywall={() => setIsPaywallOpen(true)}
               />
             )}
 
@@ -300,15 +336,12 @@ export function App() {
               />
             )}
 
-            {activeTab === 'planner' && (
-              <PlannerScreen
-                mealPlan={mealPlan}
+            {activeTab === 'shopping' && (
+              <ShoppingListScreen
                 pantryProducts={products}
-                profile={currentProfile}
-                onUpdateMealPlan={handleUpdateMealPlan}
-                onToggleMeal={handleToggleMeal}
-                onReplaceMeal={handleReplaceMeal}
-                onOpenPaywall={() => setIsPaywallOpen(true)}
+                mealPlan={mealPlan}
+                recipes={recipes}
+                onNavigateToFridge={() => setActiveTab('fridge')}
               />
             )}
           </motion.div>
@@ -323,6 +356,7 @@ export function App() {
           setActiveTab(tab);
         }}
         pantryExpiringCount={expiringProducts.length}
+        shoppingPendingCount={pendingShoppingCount}
       />
 
       {/* Модальное окно настроек */}

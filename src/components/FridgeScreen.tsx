@@ -101,7 +101,7 @@ export const FridgeScreen = ({
   };
 
   return (
-    <div className="space-y-4 pb-24">
+    <div className="space-y-4 pb-28">
       {/* Шапка экрана */}
       <div className="flex items-center justify-between">
         <div>
