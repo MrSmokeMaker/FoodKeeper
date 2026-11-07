@@ -6,7 +6,9 @@ interface GeminiRequestOptions {
 }
 
 // По умолчанию используется официальный эндпоинт, либо пользовательский прокси
-const DEFAULT_BASE_URL = 'https://generativelanguage.googleapis.com';
+export const DEFAULT_PROXY_URL = 'https://pqeicvohoegcczvdxtiz.supabase.co/functions/v1/gemini-proxy';
+const DEFAULT_BASE_URL = DEFAULT_PROXY_URL;
+const DEFAULT_MODEL = 'gemini-3.5-flash';
 
 function cleanJsonString(str: string): string {
   return str
@@ -36,7 +38,7 @@ async function callGemini(
 
   // Если указан прокси, нормализуем URL
   const baseUrl = proxyUrl?.trim() ? proxyUrl.trim().replace(/\/+$/, '') : DEFAULT_BASE_URL;
-  const model = 'gemini-1.5-flash';
+  const model = (import.meta.env.VITE_GEMINI_MODEL as string)?.trim() || DEFAULT_MODEL;
   const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const parts: any[] = [{ text: prompt }];

@@ -334,7 +334,7 @@ export const SettingsModal = ({
                   type="text"
                   value={proxyUrl}
                   onChange={(e) => setProxyUrl(e.target.value)}
-                  placeholder="https://generativelanguage.googleapis.com"
+                  placeholder="https://pqeicvohoegcczvdxtiz.supabase.co/functions/v1/gemini-proxy"
                   className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 font-mono"
                 />
               </div>
