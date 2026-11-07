@@ -1,7 +1,9 @@
 import { useState, useRef } from 'react';
-import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap } from 'lucide-react';
+import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap, Calendar, Scale, Flame, Tag } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { Product, ProductCategory, UserProfile } from '../types';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, ensureCategoryExists, INITIAL_CATEGORIES } from '../db';
+import type { Product, UserProfile } from '../types';
 import { parseProductLabel } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
 
@@ -25,10 +27,11 @@ export const ScannerScreen = ({
   const [error, setError] = useState<string | null>(null);
   const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
 
-  // Распознанные поля
+  // Распознанные параметры (Вес, КБЖУ, Калории, Категория, Срок годности)
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<ProductCategory>('dairy');
-  const [quantity, setQuantity] = useState(150);
+  const [category, setCategory] = useState('dairy');
+  const [customCategory, setCustomCategory] = useState('');
+  const [quantity, setQuantity] = useState(250);
   const [unit, setUnit] = useState<'г' | 'кг' | 'мл' | 'л' | 'шт'>('г');
   const [calories, setCalories] = useState(70);
   const [protein, setProtein] = useState(8);
@@ -40,9 +43,13 @@ export const ScannerScreen = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isPro = profile.subscriptionTier === 'pro';
-  const scansLeft = Math.max(0, 3 - (profile.dailyScansUsed || 0));
+  // Для бесплатного тарифа 7 сканирований в день
+  const freeDailyLimit = 7;
+  const scansLeft = Math.max(0, freeDailyLimit - (profile.dailyScansUsed || 0));
 
-  // Определение штрихкода через Web BarcodeDetector API (если поддерживается браузером)
+  const dbCategories = useLiveQuery(() => db.categories.toArray()) || INITIAL_CATEGORIES;
+
+  // Определение штрихкода через Web BarcodeDetector API
   const tryDetectBarcode = async (imgElement: HTMLImageElement) => {
     if ('BarcodeDetector' in window) {
       try {
@@ -65,7 +72,6 @@ export const ScannerScreen = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Проверка лимитов для Free-тарифа
     if (!isPro && scansLeft <= 0) {
       triggerHaptic('medium');
       onOpenPaywall();
@@ -77,7 +83,6 @@ export const ScannerScreen = ({
       const base64 = reader.result as string;
       setImage(base64);
 
-      // Пробуем распознать штрихкод параллельно
       const img = new Image();
       img.src = base64;
       img.onload = () => tryDetectBarcode(img);
@@ -98,7 +103,11 @@ export const ScannerScreen = ({
       });
 
       if (result.name) setName(result.name);
-      if (result.category) setCategory(result.category);
+      if (result.category) {
+        // Автоматически регистрируем новую категорию при необходимости
+        const catId = await ensureCategoryExists(result.category);
+        setCategory(catId);
+      }
       if (result.quantity) setQuantity(result.quantity);
       if (result.unit) setUnit(result.unit);
       if (result.calories !== undefined) setCalories(result.calories);
@@ -117,12 +126,24 @@ export const ScannerScreen = ({
     }
   };
 
+  // Расчет КБЖУ на всю упаковку
+  const multiplier = unit === 'г' || unit === 'мл' ? quantity / 100 : quantity;
+  const totalPackageCalories = Math.round(calories * multiplier);
+  const totalPackageProtein = (protein * multiplier).toFixed(1);
+  const totalPackageFat = (fat * multiplier).toFixed(1);
+  const totalPackageCarbs = (carbs * multiplier).toFixed(1);
+
   const handleSaveToFridge = async () => {
     if (!name.trim()) return;
 
+    let finalCategory = category;
+    if (category === 'NEW_CUSTOM' && customCategory.trim()) {
+      finalCategory = await ensureCategoryExists(customCategory.trim());
+    }
+
     await onAddProduct({
       name: name.trim(),
-      category,
+      category: finalCategory,
       quantity,
       unit,
       calories,
@@ -149,18 +170,18 @@ export const ScannerScreen = ({
 
   return (
     <div className="space-y-4 pb-24">
-      {/* Заголовок */}
+      {/* Шапка */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            <Camera className="w-5 h-5 text-emerald-500" /> Гибридный сканер
+            <Camera className="w-5 h-5 text-emerald-500" /> Сканер этикеток
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Распознавание штрихкодов и таблиц КБЖУ через ИИ
+            Распознает вес, калории, КБЖУ, категорию и срок годности
           </p>
         </div>
 
-        {/* Статус лимита сканов */}
+        {/* Статус лимита */}
         {isPro ? (
           <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
             <Zap className="w-3 h-3 fill-amber-500" /> Безлимит PRO
@@ -170,7 +191,7 @@ export const ScannerScreen = ({
             onClick={onOpenPaywall}
             className="text-[11px] font-bold px-2 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-amber-500 flex items-center gap-1"
           >
-            <span>Осталось сканов: {scansLeft} / 3</span>
+            <span>Сканов сегодня: {scansLeft} из 7 (Free)</span>
           </button>
         )}
       </div>
@@ -192,7 +213,7 @@ export const ScannerScreen = ({
             {loading && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center text-white space-y-2">
                 <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
-                <span className="text-xs font-semibold">ИИ анализирует состав и КБЖУ...</span>
+                <span className="text-xs font-semibold">ИИ читает вес, КБЖУ и срок годности...</span>
                 <div className="w-32 h-1 bg-white/20 rounded-full overflow-hidden">
                   <div className="w-full h-full bg-emerald-400 animate-pulse" />
                 </div>
@@ -221,10 +242,10 @@ export const ScannerScreen = ({
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                Сделайте снимок этикетки или штрихкода
+                Сфотографируйте этикетку или чек товара
               </p>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                ИИ автоматически извлечет пищевую ценность на 100г
+                ИИ автоматически определит точный вес упаковки, КБЖУ на 100г и срок годности
               </p>
             </div>
             <div className="flex gap-2 justify-center">
@@ -232,7 +253,7 @@ export const ScannerScreen = ({
                 onClick={() => fileInputRef.current?.click()}
                 className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 active:scale-95 transition-all"
               >
-                <Upload className="w-4 h-4" /> Сканировать камерой
+                <Upload className="w-4 h-4" /> Сделать снимок
               </button>
             </div>
           </div>
@@ -255,14 +276,14 @@ export const ScannerScreen = ({
         </div>
       )}
 
-      {/* Форма подтверждения распознанных данных */}
+      {/* Форма подтверждения с обязательными параметрами: Вес, КБЖУ, Калории, Срок годности */}
       {(image || name) && (
         <div className="glass-card rounded-3xl p-4 space-y-3 animate-fade-in shadow-sm">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
             <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-emerald-500" /> Распознанные параметры
+              <Sparkles className="w-4 h-4 text-emerald-500" /> Распознанные данные продукта
             </span>
-            <span className="text-[10px] text-zinc-400">Проверьте перед сохранением</span>
+            <span className="text-[10px] text-zinc-400">Вес, КБЖУ, Срок</span>
           </div>
 
           <div className="space-y-2.5 text-xs">
@@ -276,92 +297,133 @@ export const ScannerScreen = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            {/* Категория (с авто-добавлением новых) */}
+            <div>
+              <label className="text-zinc-500 block mb-1">Категория</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0 mb-1 font-medium"
+              >
+                {dbCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+                <option value="NEW_CUSTOM">+ Ввести свою категорию...</option>
+              </select>
+
+              {category === 'NEW_CUSTOM' && (
+                <div className="mt-1 flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <input
+                    type="text"
+                    value={customCategory}
+                    onChange={(e) => setCustomCategory(e.target.value)}
+                    placeholder="Название новой категории..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-700 border-0 text-xs"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Вес и Единица измерения */}
+            <div className="grid grid-cols-2 gap-2 bg-emerald-500/5 p-2.5 rounded-2xl border border-emerald-500/15">
               <div>
-                <label className="text-zinc-500 block mb-1">Категория</label>
-                <select
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value as any)}
-                  className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
-                >
-                  <option value="dairy">Молочка</option>
-                  <option value="meat">Мясо</option>
-                  <option value="fish">Рыба</option>
-                  <option value="veg_fruit">Овощи/Фрукты</option>
-                  <option value="grocery">Бакалея</option>
-                  <option value="other">Другое</option>
-                </select>
+                <label className="text-zinc-600 dark:text-zinc-300 block mb-1 font-semibold flex items-center gap-1">
+                  <Scale className="w-3 h-3 text-emerald-500" /> Вес упаковки
+                </label>
+                <input
+                  type="number"
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
+                />
               </div>
               <div>
-                <label className="text-zinc-500 block mb-1">Вес / объём</label>
-                <div className="flex gap-1">
+                <label className="text-zinc-600 dark:text-zinc-300 block mb-1 font-semibold">
+                  Ед. измерения
+                </label>
+                <select
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value as any)}
+                  className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
+                >
+                  <option value="г">г (граммы)</option>
+                  <option value="кг">кг</option>
+                  <option value="мл">мл (миллилитры)</option>
+                  <option value="л">л</option>
+                  <option value="шт">шт (штуки)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* КБЖУ на 100г */}
+            <div>
+              <span className="text-[10px] text-zinc-400 block mb-1 font-semibold">
+                Пищевая ценность (на 100г / 100мл):
+              </span>
+              <div className="grid grid-cols-4 gap-1.5">
+                <div>
+                  <label className="text-[10px] text-zinc-400 block text-center">Ккал</label>
                   <input
                     type="number"
-                    value={quantity}
-                    onChange={(e) => setQuantity(Number(e.target.value))}
-                    className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0 font-semibold"
+                    value={calories}
+                    onChange={(e) => setCalories(Number(e.target.value))}
+                    className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-emerald-500"
                   />
-                  <select
-                    value={unit}
-                    onChange={(e) => setUnit(e.target.value as any)}
-                    className="px-2 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
-                  >
-                    <option value="г">г</option>
-                    <option value="кг">кг</option>
-                    <option value="мл">мл</option>
-                    <option value="л">л</option>
-                    <option value="шт">шт</option>
-                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 block text-center">Белки (г)</label>
+                  <input
+                    type="number"
+                    value={protein}
+                    onChange={(e) => setProtein(Number(e.target.value))}
+                    className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 block text-center">Жиры (г)</label>
+                  <input
+                    type="number"
+                    value={fat}
+                    onChange={(e) => setFat(Number(e.target.value))}
+                    className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-zinc-400 block text-center">Углев (г)</label>
+                  <input
+                    type="number"
+                    value={carbs}
+                    onChange={(e) => setCarbs(Number(e.target.value))}
+                    className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-purple-500"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-1.5 pt-1">
-              <div>
-                <label className="text-[10px] text-zinc-400 block text-center">Ккал/100г</label>
-                <input
-                  type="number"
-                  value={calories}
-                  onChange={(e) => setCalories(Number(e.target.value))}
-                  className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-400 block text-center">Белки</label>
-                <input
-                  type="number"
-                  value={protein}
-                  onChange={(e) => setProtein(Number(e.target.value))}
-                  className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-blue-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-400 block text-center">Жиры</label>
-                <input
-                  type="number"
-                  value={fat}
-                  onChange={(e) => setFat(Number(e.target.value))}
-                  className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-amber-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-zinc-400 block text-center">Углев</label>
-                <input
-                  type="number"
-                  value={carbs}
-                  onChange={(e) => setCarbs(Number(e.target.value))}
-                  className="w-full p-1.5 text-center rounded-lg bg-zinc-100 dark:bg-zinc-800 border-0 font-black text-purple-500"
-                />
-              </div>
+            {/* Сводка КБЖУ на весь вес продукта */}
+            <div className="p-2 rounded-xl bg-zinc-100 dark:bg-zinc-800/60 flex items-center justify-between text-[11px]">
+              <span className="text-zinc-500 flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-emerald-500" /> На всю пачку ({quantity} {unit}):
+              </span>
+              <span className="font-bold text-zinc-900 dark:text-zinc-100">
+                {totalPackageCalories} ккал · Б {totalPackageProtein}г · Ж {totalPackageFat}г · У {totalPackageCarbs}г
+              </span>
             </div>
 
-            <div>
-              <label className="text-zinc-500 block mb-1">Срок годности (до)</label>
+            {/* Срок годности */}
+            <div className="bg-zinc-50 dark:bg-zinc-800/40 p-2 rounded-xl border border-zinc-200/50 dark:border-white/5">
+              <label className="text-zinc-500 block mb-1 font-semibold flex items-center gap-1">
+                <Calendar className="w-3 h-3 text-emerald-500" /> Срок годности (до какой даты)
+              </label>
               <input
                 type="date"
+                required
                 value={expiryDate}
                 onChange={(e) => setExpiryDate(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
+                className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
               />
             </div>
           </div>
@@ -379,7 +441,7 @@ export const ScannerScreen = ({
             ) : (
               <>
                 <Check className="w-5 h-5" />
-                <span>Сохранить в «Холодильник»</span>
+                <span>Добавить в «Холодильник»</span>
               </>
             )}
           </button>

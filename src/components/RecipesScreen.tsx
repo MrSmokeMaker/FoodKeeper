@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle } from 'lucide-react';
+import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
-import { parseRecipeFromWeb } from '../services/gemini';
+import { parseRecipeFromWeb, searchOnlineRecipesViaAI } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
 
 interface RecipesScreenProps {
@@ -28,6 +29,9 @@ export const RecipesScreen = ({
   const [importInput, setImportInput] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [searchCatalogQuery, setSearchCatalogQuery] = useState('');
+  const [searchingCatalog, setSearchingCatalog] = useState(false);
 
   const isPro = profile.subscriptionTier === 'pro';
 
@@ -62,6 +66,57 @@ export const RecipesScreen = ({
     setIsImportModalOpen(true);
   };
 
+  // Синхронизация с открытой интернет-библиотекой рецептов
+  const handleSyncLibrary = async () => {
+    setSyncing(true);
+    triggerHaptic('light');
+    try {
+      const count = await syncOnlineRecipeCatalog();
+      triggerHaptic('success');
+      confetti({ particleCount: 50, spread: 60 });
+      alert(count > 0 ? `Добавлено ${count} новых сбалансированных рецептов с точными граммовками!` : 'База рецептов уже полностью синхронизирована с библиотекой.');
+    } catch (e: any) {
+      alert('Ошибка синхронизации: ' + e.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Поиск новых рецептов в интернет-каталоге через ИИ
+  const handleSearchOnlineCatalog = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchCatalogQuery.trim()) return;
+
+    if (!isPro) {
+      onOpenPaywall();
+      return;
+    }
+
+    setSearchingCatalog(true);
+    try {
+      const found = await searchOnlineRecipesViaAI(searchCatalogQuery.trim(), {
+        proxyUrl: profile.geminiProxyUrl,
+      });
+
+      for (const r of found) {
+        for (const ing of r.ingredients) {
+          if (ing.category) {
+            await ensureCategoryExists(ing.category);
+          }
+        }
+        await onAddRecipe(r);
+      }
+
+      confetti({ particleCount: 45, spread: 55 });
+      setSearchCatalogQuery('');
+      triggerHaptic('success');
+    } catch (err: any) {
+      alert('Ошибка поиска: ' + err.message);
+    } finally {
+      setSearchingCatalog(false);
+    }
+  };
+
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importInput.trim()) return;
@@ -74,6 +129,13 @@ export const RecipesScreen = ({
       const parsed = await parseRecipeFromWeb(importInput.trim(), {
         proxyUrl: profile.geminiProxyUrl,
       });
+
+      // Авто-регистрация новых категорий ингредиентов
+      for (const ing of parsed.ingredients) {
+        if (ing.category) {
+          await ensureCategoryExists(ing.category);
+        }
+      }
 
       await onAddRecipe(parsed);
       setIsImportModalOpen(false);
@@ -109,26 +171,56 @@ export const RecipesScreen = ({
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            <ChefHat className="w-5 h-5 text-emerald-500" /> Рецепты
+            <ChefHat className="w-5 h-5 text-emerald-500" /> База рецептов
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Из того, что есть в холодильнике, и открытых библиотек
+            Синхронизация с кулинарной библиотекой и точные граммовки
           </p>
         </div>
 
-        <button
-          onClick={handleOpenImport}
-          className="px-3 py-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 hover:opacity-95"
-        >
-          <Globe className="w-3.5 h-3.5" />
-          <span>Импорт</span>
-          {!isPro && (
-            <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-black">
-              PRO
-            </span>
-          )}
-        </button>
+        <div className="flex items-center space-x-1.5">
+          <button
+            onClick={handleSyncLibrary}
+            disabled={syncing}
+            className="px-2.5 py-1.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 text-xs font-bold flex items-center gap-1 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+            title="Синхронизировать с библиотекой"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-emerald-500 ${syncing ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Синхронизация</span>
+          </button>
+          <button
+            onClick={handleOpenImport}
+            className="px-3 py-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 hover:opacity-95"
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Импорт</span>
+            {!isPro && (
+              <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-black">
+                PRO
+              </span>
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Быстрый поиск в интернет-библиотеке */}
+      <form onSubmit={handleSearchOnlineCatalog} className="flex gap-2">
+        <input
+          type="text"
+          value={searchCatalogQuery}
+          onChange={(e) => setSearchCatalogQuery(e.target.value)}
+          placeholder="Поиск рецепта в интернет-библиотеке (например: Сырники, Боул, Лазанья)..."
+          className="flex-1 px-3.5 py-2 text-xs rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+        />
+        <button
+          type="submit"
+          disabled={searchingCatalog || !searchCatalogQuery.trim()}
+          className="px-3.5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 disabled:opacity-50 flex items-center gap-1"
+        >
+          {searchingCatalog ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          <span>Найти</span>
+        </button>
+      </form>
 
       {/* Переключатель табов */}
       <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl">
@@ -156,11 +248,11 @@ export const RecipesScreen = ({
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
-          Библиотека ({recipes.length})
+          Каталог ({recipes.length})
         </button>
       </div>
 
-      {/* Список карточек рецептов */}
+      {/* Список карточек рецептов с граммовками */}
       <div className="space-y-3">
         {sortedRecipes.map((recipe) => {
           const match = getPantryMatch(recipe);
@@ -182,7 +274,7 @@ export const RecipesScreen = ({
                     </span>
                     {recipe.importedFromWeb && (
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 flex items-center gap-1">
-                        <Globe className="w-2.5 h-2.5" /> Из интернета
+                        <Globe className="w-2.5 h-2.5" /> Онлайн-каталог
                       </span>
                     )}
                   </div>
@@ -193,6 +285,24 @@ export const RecipesScreen = ({
                     {recipe.description}
                   </p>
                 </div>
+              </div>
+
+              {/* Превью ингредиентов с граммовками */}
+              <div className="mt-2.5 flex flex-wrap gap-1">
+                {recipe.ingredients.slice(0, 4).map((ing, idx) => (
+                  <span
+                    key={idx}
+                    className="text-[10px] px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center gap-1"
+                  >
+                    <span>{ing.name}</span>
+                    <b className="text-emerald-600 dark:text-emerald-400">{ing.amount}{ing.unit}</b>
+                  </span>
+                ))}
+                {recipe.ingredients.length > 4 && (
+                  <span className="text-[10px] text-zinc-400 self-center">
+                    +{recipe.ingredients.length - 4} ещё
+                  </span>
+                )}
               </div>
 
               {/* Мэтчинг с холодильником и КБЖУ */}
@@ -227,13 +337,13 @@ export const RecipesScreen = ({
         })}
       </div>
 
-      {/* Модальное окно просмотра рецепта */}
+      {/* Модальное окно просмотра рецепта с обязательными граммовками */}
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
             <div className="p-4 border-b border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                Карточка рецепта
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Scale className="w-3.5 h-3.5" /> Рецепт с граммовками
               </span>
               <button
                 onClick={() => setSelectedRecipe(null)}
@@ -263,7 +373,7 @@ export const RecipesScreen = ({
                 )}
               </div>
 
-              {/* Плашка КБЖУ на порцию */}
+              {/* Плашка КБЖУ на 1 порцию */}
               <div className="grid grid-cols-4 gap-2 bg-zinc-50 dark:bg-zinc-800/60 p-3 rounded-2xl text-center">
                 <div>
                   <span className="text-[10px] text-zinc-400 block">Калории</span>
@@ -291,10 +401,10 @@ export const RecipesScreen = ({
                 </div>
               </div>
 
-              {/* Ингредиенты */}
+              {/* Ингредиенты с точными граммовками */}
               <div>
                 <h4 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-2">
-                  Ингредиенты:
+                  Ингредиенты (точные граммовки на {selectedRecipe.servings || 1} порцию):
                 </h4>
                 <div className="space-y-1.5 text-xs">
                   {selectedRecipe.ingredients.map((ing, i) => {
@@ -304,9 +414,9 @@ export const RecipesScreen = ({
                     return (
                       <div
                         key={i}
-                        className="flex items-center justify-between p-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/40"
+                        className="flex items-center justify-between p-2.5 rounded-xl bg-zinc-50 dark:bg-zinc-800/40"
                       >
-                        <span className="font-medium text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                        <span className="font-semibold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
                           {inStock ? (
                             <Check className="w-3.5 h-3.5 text-emerald-500" />
                           ) : (
@@ -314,9 +424,14 @@ export const RecipesScreen = ({
                           )}
                           {ing.name}
                         </span>
-                        <span className="text-zinc-500">
-                          {ing.amount} {ing.unit} {inStock ? '(в наличии)' : '(купить)'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-extrabold text-xs">
+                            {ing.amount} {ing.unit}
+                          </span>
+                          <span className="text-[10px] text-zinc-400">
+                            {inStock ? 'в холодильнике' : 'докупить'}
+                          </span>
+                        </div>
                       </div>
                     );
                   })}
@@ -326,7 +441,7 @@ export const RecipesScreen = ({
               {/* Шаги приготовления */}
               <div>
                 <h4 className="text-xs font-bold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider mb-2">
-                  Приготовление:
+                  Пошаговое приготовление:
                 </h4>
                 <div className="space-y-2 text-xs">
                   {selectedRecipe.instructions.map((step, idx) => (
@@ -354,7 +469,7 @@ export const RecipesScreen = ({
                 onClick={() => handleCook(selectedRecipe)}
                 className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5"
               >
-                <Utensils className="w-4 h-4" /> Я приготовил!
+                <Utensils className="w-4 h-4" /> Я приготовил! (Списать)
               </button>
             </div>
           </div>
@@ -367,7 +482,7 @@ export const RecipesScreen = ({
           <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-500" /> Импорт рецепта через ИИ
+                <Sparkles className="w-4 h-4 text-emerald-500" /> Импорт рецепта с граммовками
               </h3>
               <button
                 onClick={() => setIsImportModalOpen(false)}
@@ -380,14 +495,14 @@ export const RecipesScreen = ({
             <form onSubmit={handleImport} className="space-y-3 text-xs">
               <div>
                 <label className="text-zinc-500 block mb-1">
-                  Ссылка на рецепт или произвольный текст с ингредиентами
+                  Ссылка на рецепт или текст с ингредиентами
                 </label>
                 <textarea
                   rows={4}
                   required
                   value={importInput}
                   onChange={(e) => setImportInput(e.target.value)}
-                  placeholder="Вставьте ссылку на кулинарный сайт (eda.ru, povarenok...) или скопированный текст рецепта..."
+                  placeholder="Вставьте ссылку на любой кулинарный сайт или текст рецепта — ИИ определит категории и точные граммовки..."
                   className="w-full px-3 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0 text-zinc-900 dark:text-zinc-100"
                 />
               </div>
@@ -405,7 +520,7 @@ export const RecipesScreen = ({
                 className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 {importLoading ? (
-                  <span>ИИ анализирует и рассчитывает КБЖУ...</span>
+                  <span>ИИ рассчитывает граммовки и КБЖУ...</span>
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" /> Распознать и добавить

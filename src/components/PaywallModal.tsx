@@ -33,12 +33,12 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
   };
 
   const proFeatures = [
-    { title: 'Безлимитный ИИ-сканер этикеток', desc: 'Распознавание любых сложных упаковок, составов и таблиц КБЖУ без ограничений (на Free — 3 в день).' },
-    { title: 'ИИ-нутрициолог на 7 дней', desc: 'Автоматическая сборка 28 приёмов пищи под суточные нормы калорий и макронутриентов.' },
-    { title: 'Точечная замена блюд в 1 клик', desc: 'Не нравится блюдо? ИИ мгновенно подберет замену с сохранением дневного КБЖУ.' },
-    { title: 'Безлимитный холодильник', desc: 'Добавляйте сколько угодно продуктов (на Free — до 15) с трекером сроков годности.' },
-    { title: 'Импорт рецептов из интернета по ссылке', desc: 'Вставьте ссылку с любого сайта — ИИ рассчитает КБЖУ на порцию и список ингредиентов.' },
-    { title: 'Умный список покупок и Telegram', desc: 'Экспорт недостающих ингредиентов в Telegram-чат одной кнопкой.' },
+    { title: 'Безлимитный ИИ-сканер этикеток', desc: 'Распознавание любых упаковок, составов и сроков годности без лимитов (на Free — 7 сканирований в день).' },
+    { title: 'ИИ-нутрициолог на 7 дней', desc: 'Автоматическая сборка 28 приёмов пищи под ваш суточный калораж с точными граммовками.' },
+    { title: 'Точечная замена блюд в 1 клик', desc: 'Не нравится блюдо? ИИ мгновенно подберет альтернативу с сохранением дневного баланса КБЖУ.' },
+    { title: 'Импорт любых рецептов по ссылке', desc: 'Вставьте ссылку с любого кулинарного сайта — ИИ извлечет ингредиенты, точные граммовки и КБЖУ на порцию.' },
+    { title: 'Поиск в глобальной онлайн-библиотеке', desc: 'Генерация рецептов по любым ингредиентам или названиям блюд.' },
+    { title: 'Умный список покупок и Telegram', desc: 'Автоматический экспорт недостающих ингредиентов в Telegram-чат.' },
   ];
 
   return (
@@ -64,7 +64,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
             Индивидуальный ИИ-диетолог и полный контроль рациона
           </h2>
           <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
-            Экономьте до 5 000 ₽ в месяц на продуктах за счёт умного холодильника и достигайте целевого веса в 2 раза быстрее.
+            Экономьте до 5 000 ₽ в месяц за счёт умного использования запасов и достигайте целевого веса в 2 раза быстрее.
           </p>
         </div>
 
@@ -74,7 +74,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
             <div className="p-2 text-center rounded-xl bg-white dark:bg-zinc-900 shadow-sm">
               <span className="text-[10px] text-zinc-400 block">Текущий тариф</span>
               <span className="font-bold text-zinc-700 dark:text-zinc-300 uppercase">
-                {currentTier === 'pro' ? 'PRO ✨' : 'FREE'}
+                {currentTier === 'pro' ? 'PRO ✨' : 'FREE (7 сканов/день)'}
               </span>
             </div>
             <div className="p-2 text-center rounded-xl bg-gradient-to-r from-amber-500/15 to-emerald-500/15 border border-amber-500/30">
@@ -102,11 +102,11 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
           </div>
         </div>
 
-        {/* Футер с кнопкой подписки */}
+        {/* Футер */}
         <div className="p-4 border-t border-zinc-200/80 dark:border-white/5 space-y-2">
           {currentTier === 'pro' ? (
             <div className="p-3 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold rounded-2xl text-center flex items-center justify-center gap-2">
-              <ShieldCheck className="w-4 h-4" /> PRO-подписка уже активна
+              <ShieldCheck className="w-4 h-4" /> PRO-подписка активна
             </div>
           ) : (
             <button

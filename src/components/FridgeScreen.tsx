@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Search, Plus, Trash2, Calendar, Sparkles, X, Check, Refrigerator } from 'lucide-react';
-import type { Product, ProductCategory, UserProfile } from '../types';
+import { Search, Plus, Trash2, Calendar, Sparkles, X, Check, Refrigerator, Tag } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, ensureCategoryExists, INITIAL_CATEGORIES } from '../db';
+import type { Product, UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 
 interface FridgeScreenProps {
@@ -13,32 +15,21 @@ interface FridgeScreenProps {
   onOpenPaywall: () => void;
 }
 
-const CATEGORIES: { id: ProductCategory | 'all'; label: string }[] = [
-  { id: 'all', label: 'Все' },
-  { id: 'dairy', label: 'Молочка' },
-  { id: 'meat', label: 'Мясо' },
-  { id: 'fish', label: 'Рыба' },
-  { id: 'veg_fruit', label: 'Овощи/Фрукты' },
-  { id: 'grocery', label: 'Бакалея' },
-  { id: 'other', label: 'Другое' },
-];
-
 export const FridgeScreen = ({
   products,
-  profile,
   onAddProduct,
   onDeleteProduct,
   onUpdateQuantity,
   onNavigateToScanner,
-  onOpenPaywall,
 }: FridgeScreenProps) => {
   const [search, setSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Форма ручного добавления
   const [name, setName] = useState('');
-  const [category, setCategory] = useState<ProductCategory>('dairy');
+  const [category, setCategory] = useState('dairy');
+  const [customCategory, setCustomCategory] = useState('');
   const [quantity, setQuantity] = useState(200);
   const [unit, setUnit] = useState<'г' | 'кг' | 'мл' | 'л' | 'шт'>('г');
   const [expiryDays, setExpiryDays] = useState(7);
@@ -47,12 +38,21 @@ export const FridgeScreen = ({
   const [fat, setFat] = useState(5);
   const [carbs, setCarbs] = useState(10);
 
-  const isPro = profile.subscriptionTier === 'pro';
-  const isAtFreeLimit = !isPro && products.length >= 15;
+  // Динамические категории из базы IndexedDB
+  const dbCategories = useLiveQuery(() => db.categories.toArray()) || INITIAL_CATEGORIES;
+
+  // Формируем список уникальных категорий для фильтрации
+  const categoryFilterList = [
+    { id: 'all', label: 'Все' },
+    ...dbCategories.map((c) => ({ id: c.id, label: c.label })),
+  ];
 
   const filtered = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+    const matchesCategory =
+      selectedCategory === 'all' ||
+      p.category === selectedCategory ||
+      dbCategories.find((c) => c.id === selectedCategory)?.label.toLowerCase() === p.category.toLowerCase();
     return matchesSearch && matchesCategory;
   });
 
@@ -69,10 +69,9 @@ export const FridgeScreen = ({
     e.preventDefault();
     if (!name.trim()) return;
 
-    if (isAtFreeLimit) {
-      setIsModalOpen(false);
-      onOpenPaywall();
-      return;
+    let finalCategory = category;
+    if (category === 'NEW_CUSTOM' && customCategory.trim()) {
+      finalCategory = await ensureCategoryExists(customCategory.trim());
     }
 
     const expDate = new Date();
@@ -80,7 +79,7 @@ export const FridgeScreen = ({
 
     await onAddProduct({
       name: name.trim(),
-      category,
+      category: finalCategory,
       quantity,
       unit,
       expiryDate: expDate.toISOString().split('T')[0],
@@ -93,6 +92,12 @@ export const FridgeScreen = ({
     triggerHaptic('success');
     setIsModalOpen(false);
     setName('');
+    setCustomCategory('');
+  };
+
+  const getCategoryLabel = (catId: string) => {
+    const found = dbCategories.find((c) => c.id === catId || c.label.toLowerCase() === catId.toLowerCase());
+    return found ? found.label : catId;
   };
 
   return (
@@ -104,7 +109,7 @@ export const FridgeScreen = ({
             <Refrigerator className="w-5 h-5 text-emerald-500" /> Мой холодильник
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {products.length} {isPro ? 'продуктов' : `/ 15 продуктов (тариф Free)`}
+            {products.length} продуктов в наличии (безлимитно на всех тарифах)
           </p>
         </div>
 
@@ -121,8 +126,7 @@ export const FridgeScreen = ({
           <button
             onClick={() => {
               triggerHaptic('light');
-              if (isAtFreeLimit) onOpenPaywall();
-              else setIsModalOpen(true);
+              setIsModalOpen(true);
             }}
             className="w-8 h-8 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700"
             title="Добавить продукт"
@@ -131,26 +135,6 @@ export const FridgeScreen = ({
           </button>
         </div>
       </div>
-
-      {/* Баннер лимита для Free */}
-      {isAtFreeLimit && (
-        <div className="p-3 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-transparent rounded-2xl border border-amber-500/30 flex items-center justify-between">
-          <div className="text-xs">
-            <span className="font-bold text-amber-600 dark:text-amber-400 block">
-              Лимит 15 продуктов заполнен
-            </span>
-            <span className="text-[11px] text-zinc-500">
-              Перейдите на PRO для безлимитного холодильника
-            </span>
-          </div>
-          <button
-            onClick={onOpenPaywall}
-            className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-xl shadow-sm"
-          >
-            PRO
-          </button>
-        </div>
-      )}
 
       {/* Поиск и категории */}
       <div className="space-y-2.5">
@@ -165,8 +149,9 @@ export const FridgeScreen = ({
           />
         </div>
 
+        {/* Динамическая лента категорий */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {CATEGORIES.map((cat) => (
+          {categoryFilterList.map((cat) => (
             <button
               key={cat.id}
               onClick={() => {
@@ -185,7 +170,7 @@ export const FridgeScreen = ({
         </div>
       </div>
 
-      {/* Список продуктов со свайп-жестами */}
+      {/* Список продуктов */}
       <div className="space-y-2.5">
         {filtered.length === 0 ? (
           <div className="text-center py-12 glass-card rounded-3xl p-6">
@@ -211,6 +196,9 @@ export const FridgeScreen = ({
                     <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
                       {p.name}
                     </h4>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-zinc-100 dark:bg-zinc-800 text-zinc-500">
+                      {getCategoryLabel(p.category)}
+                    </span>
                     {isExpired ? (
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/10 text-rose-500">
                         Истёк!
@@ -239,7 +227,6 @@ export const FridgeScreen = ({
                 </div>
 
                 <div className="flex items-center space-x-2 shrink-0">
-                  {/* Количество с быстрыми кнопками */}
                   <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 rounded-xl px-2 py-1 text-xs">
                     <button
                       onClick={() => {
@@ -284,7 +271,7 @@ export const FridgeScreen = ({
       {/* Модальное окно добавления продукта вручную */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4">
+          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 Новый продукт
@@ -310,49 +297,65 @@ export const FridgeScreen = ({
                 />
               </div>
 
+              <div>
+                <label className="text-zinc-500 block mb-1">Категория продукта</label>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0 mb-1"
+                >
+                  {dbCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                  <option value="NEW_CUSTOM">+ Создать новую категорию...</option>
+                </select>
+
+                {category === 'NEW_CUSTOM' && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    <Tag className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <input
+                      type="text"
+                      required
+                      value={customCategory}
+                      onChange={(e) => setCustomCategory(e.target.value)}
+                      placeholder="Введите название новой категории..."
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-zinc-200 dark:bg-zinc-700 border-0 text-xs"
+                    />
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-zinc-500 block mb-1">Категория</label>
-                  <select
-                    value={category}
-                    onChange={(e) => setCategory(e.target.value as any)}
+                  <label className="text-zinc-500 block mb-1">Вес / объём</label>
+                  <input
+                    type="number"
+                    value={quantity}
+                    onChange={(e) => setQuantity(Number(e.target.value))}
                     className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
-                  >
-                    <option value="dairy">Молочка</option>
-                    <option value="meat">Мясо</option>
-                    <option value="fish">Рыба</option>
-                    <option value="veg_fruit">Овощи/Фрукты</option>
-                    <option value="grocery">Бакалея</option>
-                    <option value="other">Другое</option>
-                  </select>
+                  />
                 </div>
                 <div>
-                  <label className="text-zinc-500 block mb-1">Количество</label>
-                  <div className="flex gap-1">
-                    <input
-                      type="number"
-                      value={quantity}
-                      onChange={(e) => setQuantity(Number(e.target.value))}
-                      className="w-full px-2.5 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
-                    />
-                    <select
-                      value={unit}
-                      onChange={(e) => setUnit(e.target.value as any)}
-                      className="px-2 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
-                    >
-                      <option value="г">г</option>
-                      <option value="кг">кг</option>
-                      <option value="мл">мл</option>
-                      <option value="л">л</option>
-                      <option value="шт">шт</option>
-                    </select>
-                  </div>
+                  <label className="text-zinc-500 block mb-1">Ед. изм.</label>
+                  <select
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value as any)}
+                    className="w-full px-2 py-2 rounded-xl bg-zinc-100 dark:bg-zinc-800 border-0"
+                  >
+                    <option value="г">г</option>
+                    <option value="кг">кг</option>
+                    <option value="мл">мл</option>
+                    <option value="л">л</option>
+                    <option value="шт">шт</option>
+                  </select>
                 </div>
               </div>
 
               <div className="grid grid-cols-4 gap-1.5">
                 <div>
-                  <label className="text-[10px] text-zinc-400 block text-center">Ккал</label>
+                  <label className="text-[10px] text-zinc-400 block text-center">Ккал/100г</label>
                   <input
                     type="number"
                     value={calories}

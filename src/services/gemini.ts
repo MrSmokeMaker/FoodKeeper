@@ -31,19 +31,17 @@ async function callGemini(
   const apiKey = getEffectiveApiKey(options.apiKey);
   const { proxyUrl } = options;
   if (!apiKey) {
-    throw new Error('API ключ Gemini не указан в настройках или .env.');
+    throw new Error('API ключ Gemini не настроен в приложении.');
   }
 
   // Если указан прокси, нормализуем URL
   const baseUrl = proxyUrl?.trim() ? proxyUrl.trim().replace(/\/+$/, '') : DEFAULT_BASE_URL;
-  // Используем быструю и точную модель gemini-1.5-flash
   const model = 'gemini-1.5-flash';
   const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const parts: any[] = [{ text: prompt }];
 
   if (imageBase64) {
-    // Извлекаем чистый base64 и mime-type
     const match = imageBase64.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
     if (match) {
       parts.unshift({
@@ -89,7 +87,8 @@ async function callGemini(
 }
 
 /**
- * Сканирование этикетки продукта (Vision AI)
+ * Сканирование этикетки продукта (Vision AI):
+ * Извлекает вес, калории, КБЖУ, категорию и срок годности
  */
 export async function parseProductLabel(
   imageBase64: string,
@@ -97,7 +96,6 @@ export async function parseProductLabel(
 ): Promise<Partial<Product>> {
   const activeKey = getEffectiveApiKey(options.apiKey);
   if (!activeKey) {
-    // Реалистичная симуляция, если ключ ещё не введён
     await new Promise((r) => setTimeout(r, 1200));
     return {
       name: 'Греческий йогурт Teos 2%',
@@ -113,26 +111,28 @@ export async function parseProductLabel(
   }
 
   const prompt = `
-Ты профессиональный диетолог и OCR-сканер этикеток продуктов. Проанализируй фото этикетки или упаковки товара.
-Извлеки данные и верни СТРОГО валидный JSON следующей структуры:
+Ты профессиональный нутрициолог и OCR-сканер этикеток продуктов. Проанализируй фото этикетки, чека или упаковки товара.
+ОБЯЗАТЕЛЬНО извлеки точный вес/объем, пищевую ценность (КБЖУ), категорию продукта и срок годности.
+
+Верни СТРОГО валидный JSON:
 {
   "name": "Название продукта (русский язык)",
-  "category": "одна из: dairy, meat, fish, veg_fruit, bakery, grocery, drinks, snacks, other",
-  "quantity": число (общий вес/объем упаковки),
+  "category": "Название категории на русском (например: Молочные продукты, Мясо и птица, Рыба и морепродукты, Овощи и зелень, Фрукты и ягоды, Крупы и макароны, Хлеб и выпечка, Специи и соусы, Орехи и сухофрукты, Напитки, Снеки)",
+  "quantity": число (общий вес или объем нетто всей упаковки, например 200, 450, 1000),
   "unit": "одна из: г, кг, мл, л, шт",
-  "calories": число (ккал на 100г продукта, округли до целого),
+  "calories": число (ккал строго на 100г продукта, округли до целого),
   "protein": число (белки на 100г, 1 знак после запятой),
   "fat": число (жиры на 100г, 1 знак после запятой),
   "carbs": число (углеводы на 100г, 1 знак после запятой),
-  "daysUntilExpiry": число (ориентировочный срок хранения в днях с момента сканирования, например 7 или 30)
+  "daysUntilExpiry": число (ориентировочный срок годности в днях с текущего момента, например 5, 14, 30, 90)
 }
-Если какой-то параметр не виден на этикетке, определи его по средним табличным значениям для данного продукта.
+Если какой-то параметр частично затёрт на фото, определи его по средним табличным значениям для данного типа продукта.
 `;
 
   const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey }, imageBase64);
   const parsed = JSON.parse(jsonStr);
 
-  const expiry = new Date(Date.now() + (parsed.daysUntilExpiry || 7) * 86400000)
+  const expiry = new Date(Date.now() + (Number(parsed.daysUntilExpiry) || 7) * 86400000)
     .toISOString()
     .split('T')[0];
 
@@ -150,7 +150,7 @@ export async function parseProductLabel(
 }
 
 /**
- * Импорт рецепта из веб-ссылки или текста рецепта
+ * Импорт рецепта из веб-ссылки или текста с ОБЯЗАТЕЛЬНЫМИ ГРАММОВКАМИ
  */
 export async function parseRecipeFromWeb(
   input: string,
@@ -160,8 +160,8 @@ export async function parseRecipeFromWeb(
   if (!activeKey) {
     await new Promise((r) => setTimeout(r, 1200));
     return {
-      title: 'Паста с лососем и брокколи в сливочном соусе',
-      description: 'Импортировано из открытой кулинарной библиотеки: быстрое ресторанное блюдо с балансом Омега-3 и медленных углеводов.',
+      title: 'Паста с лососем и брокколи в нежном сливочном соусе',
+      description: 'Импортировано из открытой кулинарной библиотеки: ресторанное блюдо с балансом Омега-3 и медленных углеводов.',
       prepTimeMinutes: 25,
       servings: 2,
       calories: 520,
@@ -172,42 +172,50 @@ export async function parseRecipeFromWeb(
       importedFromWeb: true,
       sourceUrl: input.startsWith('http') ? input : undefined,
       ingredients: [
-        { name: 'Лосось / сёмга (филе)', amount: 250, unit: 'г' },
-        { name: 'Паста из твердых сортов', amount: 150, unit: 'г' },
-        { name: 'Брокколи', amount: 150, unit: 'г' },
-        { name: 'Сливки 10%', amount: 100, unit: 'мл' },
-        { name: 'Чеснок и специи', amount: 5, unit: 'г' },
+        { name: 'Лосось свежий (филе)', amount: 250, unit: 'г', category: 'Рыба и морепродукты' },
+        { name: 'Паста из твердых сортов', amount: 150, unit: 'г', category: 'Крупы и макароны' },
+        { name: 'Брокколи свежая', amount: 150, unit: 'г', category: 'Овощи и зелень' },
+        { name: 'Сливки 10%', amount: 100, unit: 'мл', category: 'Молочные продукты' },
+        { name: 'Оливковое масло', amount: 10, unit: 'мл', category: 'Специи и соусы' },
+        { name: 'Чеснок и морская соль', amount: 5, unit: 'г', category: 'Специи и соусы' },
       ],
       instructions: [
-        'Отварить пасту до состояния аль денте, за 3 минуты до готовности бросить соцветия брокколи.',
-        'Лосось нарезать кубиками и слегка обжарить на сковороде 3-4 минуты.',
-        'Влить нежирные сливки, добавить чеснок и прогреть соус до лёгкого загустения.',
-        'Смешать пасту с соусом и рыбой, подавать в глубоких тарелках.',
+        'Отварить 150г пасты в подсоленной воде 8 минут до аль денте, за 3 минуты до готовности опустить соцветия брокколи (150г).',
+        'Филе лосося (250г) нарезать средними кубиками и обжарить на 10мл оливкового масла 3-4 минуты.',
+        'Влить 100мл сливок 10%, добавить измельченный зубчик чеснока и томить соус 2 минуты до лёгкого загустения.',
+        'Смешать пасту и брокколи со сливочным соусом и лососем, поперчить и подавать горячим.',
       ],
     };
   }
 
   const prompt = `
-Ты эксперт по кулинарии и нутрициолог. Пользователь предоставил текст или ссылку на рецепт:
+Ты шеф-повар и профессиональный нутрициолог. Пользователь предоставил ссылку или текст рецепта:
 "${input}"
 
-Проанализируй рецепт (если указана ссылка, используй свои знания о рецепте по данному адресу либо извлеки контекст).
+Проанализируй рецепт. В рецепте ОБЯЗАТЕЛЬНО должны быть точные числовые граммовки для каждого ингредиента!
+Никаких "по вкусу" без граммов — если специи, укажи "2 г", если яйцо, укажи "1 шт (55 г)".
+
 Сформируй СТРОГО валидный JSON:
 {
-  "title": "Краткое аппетитное название рецепта на русском",
-  "description": "Краткое описание (1-2 предложения) вкуса и пользы",
+  "title": "Аппетитное название рецепта на русском",
+  "description": "Краткое описание пользы и вкуса (1-2 предложения)",
   "prepTimeMinutes": число (время приготовления в минутах),
-  "servings": число порций (по умолчанию 1 или 2),
-  "calories": число (ккал НА ОДНУ ПОРЦИЮ),
+  "servings": число порций (например 1 или 2),
+  "calories": число (ккал СТРОГО НА ОДНУ ПОРЦИЮ),
   "protein": число (белки на порцию, г),
   "fat": число (жиры на порцию, г),
   "carbs": число (углеводы на порцию, г),
   "category": "одна из: breakfast, lunch, snack, dinner",
   "ingredients": [
-    { "name": "название продукта", "amount": число, "unit": "г / мл / шт / ч.л." }
+    {
+      "name": "Название ингредиента",
+      "amount": число (точная граммовка/число, например 180, 50, 15, 2),
+      "unit": "г / мл / шт / ч.л. / ст.л.",
+      "category": "Название категории на русском (например: Молочные продукты, Мясо и птица, Рыба и морепродукты, Овощи и зелень, Фрукты и ягоды, Крупы и макароны, Специи и соусы, Орехи и сухофрукты, Хлеб и выпечка, Другое)"
+    }
   ],
   "instructions": [
-    "Шаг 1",
+    "Пошаговый шаг 1 с указанием граммовок",
     "Шаг 2",
     "Шаг 3"
   ]
@@ -229,14 +237,106 @@ export async function parseRecipeFromWeb(
     category: parsed.category || 'lunch',
     importedFromWeb: true,
     sourceUrl: input.startsWith('http') ? input : undefined,
-    ingredients: parsed.ingredients || [],
+    ingredients: (parsed.ingredients || []).map((ing: any) => ({
+      name: ing.name,
+      amount: Number(ing.amount) || 50,
+      unit: ing.unit || 'г',
+      category: ing.category || 'other',
+    })),
     instructions: parsed.instructions || [],
   };
 }
 
 /**
+ * Поиск и генерация рецептов из онлайн-библиотеки по запросу с точными граммовками
+ */
+export async function searchOnlineRecipesViaAI(
+  query: string,
+  options: GeminiRequestOptions
+): Promise<Omit<Recipe, 'id' | 'createdAt'>[]> {
+  const activeKey = getEffectiveApiKey(options.apiKey);
+  if (!activeKey) {
+    await new Promise((r) => setTimeout(r, 1000));
+    return [
+      {
+        title: `Рецепт из каталога: ${query}`,
+        description: 'Быстрое сбалансированное блюдо из открытой онлайн-библиотеки рецептов.',
+        prepTimeMinutes: 20,
+        servings: 1,
+        calories: 450,
+        protein: 38,
+        fat: 14,
+        carbs: 42,
+        category: 'lunch',
+        importedFromWeb: true,
+        ingredients: [
+          { name: 'Основной белковый продукт', amount: 180, unit: 'г', category: 'Мясо и птица' },
+          { name: 'Сложные углеводы (крупа)', amount: 60, unit: 'г', category: 'Крупы и макароны' },
+          { name: 'Свежие сезонные овощи', amount: 150, unit: 'г', category: 'Овощи и зелень' },
+          { name: 'Масло оливковое', amount: 5, unit: 'мл', category: 'Специи и соусы' },
+        ],
+        instructions: [
+          'Отварить или запечь ингредиенты согласно точным граммовкам.',
+          'Приправить солью и специями, подавать тёплым.',
+        ],
+      },
+    ];
+  }
+
+  const prompt = `
+Ты шеф-повар кулинарного портала. Пользователь ищет рецепты по запросу: "${query}".
+Предложи 2 детальных рецепта с ОБЯЗАТЕЛЬНЫМИ ТОЧНЫМИ ГРАММОВКАМИ каждого ингредиента.
+
+Верни массив JSON:
+[
+  {
+    "title": "Название рецепта",
+    "description": "Краткое описание",
+    "prepTimeMinutes": число минут,
+    "servings": 1,
+    "calories": число ккал на порцию,
+    "protein": число г,
+    "fat": число г,
+    "carbs": число г,
+    "category": "breakfast" | "lunch" | "snack" | "dinner",
+    "ingredients": [
+      { "name": "название", "amount": число, "unit": "г / мл / шт", "category": "категория на русском" }
+    ],
+    "instructions": [
+      "Шаг 1",
+      "Шаг 2"
+    ]
+  }
+]
+`;
+
+  const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey });
+  const parsed = JSON.parse(jsonStr);
+
+  return parsed.map((item: any) => ({
+    title: item.title,
+    description: item.description || '',
+    prepTimeMinutes: Number(item.prepTimeMinutes) || 25,
+    servings: Number(item.servings) || 1,
+    calories: Number(item.calories) || 400,
+    protein: Number(item.protein) || 25,
+    fat: Number(item.fat) || 12,
+    carbs: Number(item.carbs) || 45,
+    category: item.category || 'lunch',
+    importedFromWeb: true,
+    ingredients: (item.ingredients || []).map((ing: any) => ({
+      name: ing.name,
+      amount: Number(ing.amount) || 50,
+      unit: ing.unit || 'г',
+      category: ing.category || 'other',
+    })),
+    instructions: item.instructions || [],
+  }));
+}
+
+/**
  * Генерация меню на 7 дней (4 приёма в день: завтрак, обед, полдник, ужин)
- * под целевой КБЖУ с максимизацией использования продуктов из холодильника
+ * с обязательными граммовками в названии/описании каждого блюда
  */
 export async function generateWeeklyPlanWithAI(
   profile: UserProfile,
@@ -249,12 +349,11 @@ export async function generateWeeklyPlanWithAI(
 
   if (!activeKey) {
     await new Promise((r) => setTimeout(r, 1500));
-    // Генерируем 7 дней по 4 приёма
     const generated: MealPlanItem[] = [];
     const mealTemplates = [
       {
         type: 'breakfast' as const,
-        title: 'Овсяная каша с орехами и ягодами',
+        title: 'Овсяная каша (50г) на молоке (150мл) с ягодами (40г) и мёдом (10г)',
         c: Math.round(profile.targetCalories * 0.25),
         p: Math.round(profile.targetProtein * 0.25),
         f: Math.round(profile.targetFat * 0.25),
@@ -262,7 +361,7 @@ export async function generateWeeklyPlanWithAI(
       },
       {
         type: 'lunch' as const,
-        title: 'Куриная грудка с рисом и свежими овощами',
+        title: 'Куриное филе (180г) с рисом басмати (60г) и свежими томатами (100г)',
         c: Math.round(profile.targetCalories * 0.35),
         p: Math.round(profile.targetProtein * 0.4),
         f: Math.round(profile.targetFat * 0.3),
@@ -270,7 +369,7 @@ export async function generateWeeklyPlanWithAI(
       },
       {
         type: 'snack' as const,
-        title: 'Творожный десерт с йогуртом и фруктами',
+        title: 'Творог 5% (180г) с греческим йогуртом (50г) и семенами чиа (10г)',
         c: Math.round(profile.targetCalories * 0.15),
         p: Math.round(profile.targetProtein * 0.15),
         f: Math.round(profile.targetFat * 0.15),
@@ -278,7 +377,7 @@ export async function generateWeeklyPlanWithAI(
       },
       {
         type: 'dinner' as const,
-        title: 'Запечённая рыба или омлет с зеленью',
+        title: 'Стейк лосося на пару (180г) с отварной брокколи (150г)',
         c: Math.round(profile.targetCalories * 0.25),
         p: Math.round(profile.targetProtein * 0.2),
         f: Math.round(profile.targetFat * 0.3),
@@ -309,7 +408,7 @@ export async function generateWeeklyPlanWithAI(
   }
 
   const prompt = `
-Ты шеф-повар и профессиональный спортивный диетолог.
+Ты шеф-повар и спортивный диетолог.
 Составь персональный план питания на 7 дней (ровно 4 приёма пищи в день: breakfast, lunch, snack, dinner).
 
 Данные пользователя:
@@ -320,14 +419,14 @@ export async function generateWeeklyPlanWithAI(
 
 Требования:
 1. Максимально задействуй имеющиеся продукты из холодильника.
-2. Сумма 4 приёмов пищи в день должна строго соответствовать норме (±5%).
-3. Блюда должны быть разнообразными, простыми в приготовлении и вкусными.
-4. Верни СТРОГО массив JSON из 28 элементов (7 дней по 4 приёма):
+2. В названии блюда ОБЯЗАТЕЛЬНО укажи основные ингредиенты с точными граммовками (например: "Куриное филе (180г) с гречкой (60г) и шпинатом (40г)").
+3. Сумма 4 приёмов пищи в день должна соответствовать норме (±5%).
+4. Верни СТРОГО массив JSON из 28 элементов:
 [
   {
     "date": "YYYY-MM-DD",
     "mealType": "breakfast" | "lunch" | "snack" | "dinner",
-    "title": "Аппетитное название блюда на русском",
+    "title": "Название блюда с граммовками ключевых ингредиентов",
     "calories": число,
     "protein": число,
     "fat": число,
@@ -336,7 +435,7 @@ export async function generateWeeklyPlanWithAI(
 ]
 `;
 
-  const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey });
+  const jsonStr = await callGemini(prompt, options);
   const parsed = JSON.parse(jsonStr);
 
   return parsed.map((item: any) => ({
