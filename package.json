@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vite-node tests/inventory.test.mjs"
+    "test": "vite-node tests/inventory.test.mjs",
+    "proxy": "node proxy-server.mjs"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",

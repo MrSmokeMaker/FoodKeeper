@@ -100,6 +100,7 @@ export interface UserProfile {
   targetFat: number;
   targetCarbs: number;
   geminiProxyUrl: string;
+  geminiApiKey?: string;
   theme: 'dark' | 'light';
   subscriptionTier: SubscriptionTier;
   proExpiresAt?: string;

@@ -176,7 +176,10 @@ export function App() {
     const newPlan = await generateWeeklyPlanWithAI(
       currentProfile,
       products,
-      { proxyUrl: currentProfile.geminiProxyUrl },
+      {
+        apiKey: currentProfile.geminiApiKey,
+        proxyUrl: currentProfile.geminiProxyUrl,
+      },
       todayStr
     );
     await handleUpdateMealPlan(newPlan);

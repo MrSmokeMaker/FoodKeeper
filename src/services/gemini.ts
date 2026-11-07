@@ -74,6 +74,16 @@ async function callGemini(
       const errJson = JSON.parse(errorText);
       parsedMsg = errJson.error?.message || errorText;
     } catch {}
+    if (parsedMsg.includes('User location is not supported')) {
+      throw new Error(
+        'Региональное ограничение Google (User location is not supported). Включите VPN или укажите URL прокси в Настройках приложения.'
+      );
+    }
+    if (parsedMsg.includes('User location is not supported')) {
+      throw new Error(
+        'Региональное ограничение Google (User location is not supported). Включите VPN или укажите URL прокси в Настройках приложения.'
+      );
+    }
     throw new Error(`Ошибка Gemini API (${response.status}): ${parsedMsg}`);
   }
 

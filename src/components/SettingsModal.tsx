@@ -22,6 +22,7 @@ export const SettingsModal = ({
 
   const [name, setName] = useState(profile?.name || '');
   const [proxyUrl, setProxyUrl] = useState(profile?.geminiProxyUrl || '');
+  const [apiKey, setApiKey] = useState(profile?.geminiApiKey || '');
   const [targetCalories, setTargetCalories] = useState(profile?.targetCalories || 2000);
   const [targetProtein, setTargetProtein] = useState(profile?.targetProtein || 140);
   const [targetFat, setTargetFat] = useState(profile?.targetFat || 70);
@@ -67,6 +68,7 @@ export const SettingsModal = ({
     await onSaveProfile({
       name,
       geminiProxyUrl: proxyUrl.trim(),
+      geminiApiKey: apiKey.trim(),
       targetCalories,
       targetProtein,
       targetFat,
@@ -309,6 +311,22 @@ export const SettingsModal = ({
 
             {showAdvanced && (
               <div className="mt-2 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-xl space-y-2 border border-zinc-200 dark:border-white/10">
+                <div className="mb-2.5">
+                  <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-300 block mb-1">
+                    API-ключ Gemini (Google AI Studio):
+                  </label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="AQ.Ab8... или AIzaSy..."
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 font-mono text-zinc-900 dark:text-zinc-100"
+                  />
+                  <span className="text-[10px] text-zinc-400 mt-0.5 block">
+                    Хранится локально на вашем устройстве в защищённом хранилище.
+                  </span>
+                </div>
+
                 <label className="text-[11px] text-zinc-500 block">
                   Кастомный Proxy URL для обхода региональных ограничений:
                 </label>
