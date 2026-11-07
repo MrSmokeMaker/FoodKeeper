@@ -16,7 +16,7 @@ export interface Product {
   quantity: number;
   unit: 'г' | 'кг' | 'мл' | 'л' | 'шт';
   expiryDate?: string; // YYYY-MM-DD
-  calories: number; // ккал на 100г или на единицу
+  calories: number; // ккал на 100г или на порцию
   protein: number;  // г
   fat: number;      // г
   carbs: number;    // г
@@ -47,6 +47,7 @@ export interface Recipe {
   category: 'breakfast' | 'lunch' | 'snack' | 'dinner';
   isFavorite?: boolean;
   importedFromWeb?: boolean;
+  tags?: string[];
   createdAt: string;
 }
 
@@ -73,6 +74,8 @@ export interface WeightLog {
   note?: string;
 }
 
+export type SubscriptionTier = 'free' | 'pro';
+
 export interface UserProfile {
   id?: number;
   name: string;
@@ -82,7 +85,12 @@ export interface UserProfile {
   targetProtein: number;
   targetFat: number;
   targetCarbs: number;
-  geminiApiKey: string;
-  geminiProxyUrl: string; // кастомный прокси/эндпоинт для обхода блокировок
+  geminiProxyUrl: string;
   theme: 'dark' | 'light';
+  subscriptionTier: SubscriptionTier;
+  proExpiresAt?: string;
+  dailyScansUsed: number;
+  lastScanDate: string; // YYYY-MM-DD
+  telegramId?: number;
+  telegramUsername?: string;
 }

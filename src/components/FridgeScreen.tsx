@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { Search, Plus, Trash2, Calendar, Sparkles, X, Check, Refrigerator } from 'lucide-react';
-import type { Product, ProductCategory } from '../types';
+import type { Product, ProductCategory, UserProfile } from '../types';
+import { triggerHaptic } from '../services/telegram';
 
 interface FridgeScreenProps {
   products: Product[];
+  profile: UserProfile;
   onAddProduct: (product: Omit<Product, 'id' | 'addedAt'>) => Promise<void>;
   onDeleteProduct: (id: number) => Promise<void>;
   onUpdateQuantity: (id: number, delta: number) => Promise<void>;
   onNavigateToScanner: () => void;
+  onOpenPaywall: () => void;
 }
 
 const CATEGORIES: { id: ProductCategory | 'all'; label: string }[] = [
@@ -20,13 +23,15 @@ const CATEGORIES: { id: ProductCategory | 'all'; label: string }[] = [
   { id: 'other', label: 'Другое' },
 ];
 
-export const FridgeScreen: React.FC<FridgeScreenProps> = ({
+export const FridgeScreen = ({
   products,
+  profile,
   onAddProduct,
   onDeleteProduct,
   onUpdateQuantity,
   onNavigateToScanner,
-}) => {
+  onOpenPaywall,
+}: FridgeScreenProps) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'all'>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -42,6 +47,9 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
   const [fat, setFat] = useState(5);
   const [carbs, setCarbs] = useState(10);
 
+  const isPro = profile.subscriptionTier === 'pro';
+  const isAtFreeLimit = !isPro && products.length >= 15;
+
   const filtered = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
@@ -54,13 +62,18 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
     today.setHours(0, 0, 0, 0);
     const exp = new Date(expiryDate);
     exp.setHours(0, 0, 0, 0);
-    const diff = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diff;
+    return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const handleManualAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    if (isAtFreeLimit) {
+      setIsModalOpen(false);
+      onOpenPaywall();
+      return;
+    }
 
     const expDate = new Date();
     expDate.setDate(expDate.getDate() + expiryDays);
@@ -77,6 +90,7 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
       carbs,
     });
 
+    triggerHaptic('success');
     setIsModalOpen(false);
     setName('');
   };
@@ -90,26 +104,53 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
             <Refrigerator className="w-5 h-5 text-emerald-500" /> Мой холодильник
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {products.length} продуктов в наличии
+            {products.length} {isPro ? 'продуктов' : `/ 15 продуктов (тариф Free)`}
           </p>
         </div>
 
         <div className="flex items-center space-x-2">
           <button
-            onClick={onNavigateToScanner}
+            onClick={() => {
+              triggerHaptic('light');
+              onNavigateToScanner();
+            }}
             className="px-3 py-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 hover:opacity-95"
           >
-            <Sparkles className="w-3.5 h-3.5" /> Скан этикетки
+            <Sparkles className="w-3.5 h-3.5" /> Скан
           </button>
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              triggerHaptic('light');
+              if (isAtFreeLimit) onOpenPaywall();
+              else setIsModalOpen(true);
+            }}
             className="w-8 h-8 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 flex items-center justify-center hover:bg-zinc-200 dark:hover:bg-zinc-700"
-            title="Добавить вручную"
+            title="Добавить продукт"
           >
             <Plus className="w-4 h-4" />
           </button>
         </div>
       </div>
+
+      {/* Баннер лимита для Free */}
+      {isAtFreeLimit && (
+        <div className="p-3 bg-gradient-to-r from-amber-500/15 via-orange-500/15 to-transparent rounded-2xl border border-amber-500/30 flex items-center justify-between">
+          <div className="text-xs">
+            <span className="font-bold text-amber-600 dark:text-amber-400 block">
+              Лимит 15 продуктов заполнен
+            </span>
+            <span className="text-[11px] text-zinc-500">
+              Перейдите на PRO для безлимитного холодильника
+            </span>
+          </div>
+          <button
+            onClick={onOpenPaywall}
+            className="px-3 py-1 bg-amber-500 text-white text-xs font-bold rounded-xl shadow-sm"
+          >
+            PRO
+          </button>
+        </div>
+      )}
 
       {/* Поиск и категории */}
       <div className="space-y-2.5">
@@ -128,7 +169,10 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
           {CATEGORIES.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
+              onClick={() => {
+                triggerHaptic('light');
+                setSelectedCategory(cat.id);
+              }}
               className={`px-3 py-1 rounded-xl text-xs font-medium shrink-0 transition-all ${
                 selectedCategory === cat.id
                   ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 font-semibold'
@@ -141,7 +185,7 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
         </div>
       </div>
 
-      {/* Список продуктов */}
+      {/* Список продуктов со свайп-жестами */}
       <div className="space-y-2.5">
         {filtered.length === 0 ? (
           <div className="text-center py-12 glass-card rounded-3xl p-6">
@@ -179,9 +223,7 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
                   </div>
 
                   <div className="flex items-center space-x-2 text-[10px] text-zinc-400 mt-1">
-                    <span>
-                      {p.calories} ккал / 100г
-                    </span>
+                    <span>{p.calories} ккал / 100г</span>
                     <span>•</span>
                     <span>Б {p.protein} · Ж {p.fat} · У {p.carbs}</span>
                     {p.expiryDate && (
@@ -200,7 +242,10 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
                   {/* Количество с быстрыми кнопками */}
                   <div className="flex items-center bg-zinc-100 dark:bg-zinc-800/80 rounded-xl px-2 py-1 text-xs">
                     <button
-                      onClick={() => p.id && onUpdateQuantity(p.id, -Math.max(1, Math.round(p.quantity * 0.25)))}
+                      onClick={() => {
+                        triggerHaptic('light');
+                        p.id && onUpdateQuantity(p.id, -Math.max(1, Math.round(p.quantity * 0.25)));
+                      }}
                       className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-100 px-1 font-bold"
                     >
                       -
@@ -209,7 +254,10 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
                       {p.quantity} {p.unit}
                     </span>
                     <button
-                      onClick={() => p.id && onUpdateQuantity(p.id, Math.max(1, Math.round(p.quantity * 0.25)))}
+                      onClick={() => {
+                        triggerHaptic('light');
+                        p.id && onUpdateQuantity(p.id, Math.max(1, Math.round(p.quantity * 0.25)));
+                      }}
                       className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-100 px-1 font-bold"
                     >
                       +
@@ -217,7 +265,10 @@ export const FridgeScreen: React.FC<FridgeScreenProps> = ({
                   </div>
 
                   <button
-                    onClick={() => p.id && onDeleteProduct(p.id)}
+                    onClick={() => {
+                      triggerHaptic('medium');
+                      p.id && onDeleteProduct(p.id);
+                    }}
                     className="p-1.5 rounded-xl text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
                     title="Удалить"
                   >

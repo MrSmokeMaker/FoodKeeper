@@ -25,6 +25,12 @@ export const db = new FoodKeeperDB();
 // Стартовое наполнение демо-данными при первом запуске
 export async function seedInitialDataIfNeeded() {
   const profileCount = await db.userProfile.count();
+  if (profileCount > 0) {
+    const p = await db.userProfile.toCollection().first();
+    if (p && !p.subscriptionTier) {
+      await db.userProfile.update(p.id!, { subscriptionTier: 'free', dailyScansUsed: 0, lastScanDate: new Date().toISOString().split('T')[0] });
+    }
+  }
   if (profileCount === 0) {
     // 1. Профиль пользователя
     await db.userProfile.add({
@@ -35,7 +41,9 @@ export async function seedInitialDataIfNeeded() {
       targetProtein: 140,
       targetFat: 70,
       targetCarbs: 220,
-      geminiApiKey: (import.meta.env.VITE_GEMINI_API_KEY as string)?.trim() || '',
+      subscriptionTier: 'free',
+      dailyScansUsed: 0,
+      lastScanDate: new Date().toISOString().split('T')[0],
       geminiProxyUrl: '', // По умолчанию прямой запрос или кастомный прокси
       theme: 'dark',
     });

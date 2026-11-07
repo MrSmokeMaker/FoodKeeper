@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { CalendarDays, Sparkles, CheckCircle2, Circle, ShoppingCart, RefreshCw, X, Check } from 'lucide-react';
+import { CalendarDays, Sparkles, CheckCircle2, Circle, ShoppingCart, RefreshCw, X, Check, Zap, Send, Shuffle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { MealPlanItem, Product, UserProfile } from '../types';
 import { generateWeeklyPlanWithAI } from '../services/gemini';
+import { triggerHaptic, shareTextToTelegram } from '../services/telegram';
 
 interface PlannerScreenProps {
   mealPlan: MealPlanItem[];
@@ -10,21 +11,27 @@ interface PlannerScreenProps {
   profile: UserProfile;
   onUpdateMealPlan: (items: MealPlanItem[]) => Promise<void>;
   onToggleMeal: (id: number, completed: boolean) => Promise<void>;
+  onReplaceMeal: (id: number, mealType: string, date: string) => Promise<void>;
+  onOpenPaywall: () => void;
 }
 
-export const PlannerScreen: React.FC<PlannerScreenProps> = ({
+export const PlannerScreen = ({
   mealPlan,
   pantryProducts,
   profile,
   onUpdateMealPlan,
   onToggleMeal,
-}) => {
+  onReplaceMeal,
+  onOpenPaywall,
+}: PlannerScreenProps) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [generating, setGenerating] = useState(false);
+  const [replacingMealId, setReplacingMealId] = useState<number | null>(null);
   const [isShoppingOpen, setIsShoppingOpen] = useState(false);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
 
-  // Генерация дат на 7 дней (начиная с понедельника текущей недели или сегодняшнего дня)
+  const isPro = profile.subscriptionTier === 'pro';
+
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
@@ -38,7 +45,6 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
   const activeDateStr = weekDays[selectedDayOffset]?.dateStr || weekDays[0].dateStr;
   const activeDayMeals = mealPlan.filter((m) => m.date === activeDateStr);
 
-  // Сортировка приемов пищи: breakfast -> lunch -> snack -> dinner
   const order: Record<string, number> = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
   const sortedMeals = [...activeDayMeals].sort(
     (a, b) => (order[a.mealType] || 9) - (order[b.mealType] || 9)
@@ -62,14 +68,21 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
   };
 
   const handleGenerateWeekly = async () => {
+    if (!isPro) {
+      triggerHaptic('medium');
+      onOpenPaywall();
+      return;
+    }
+
     setGenerating(true);
+    triggerHaptic('light');
+
     try {
       const startDate = weekDays[0].dateStr;
       const newPlan = await generateWeeklyPlanWithAI(
         profile,
         pantryProducts,
         {
-          apiKey: profile.geminiApiKey,
           proxyUrl: profile.geminiProxyUrl,
         },
         startDate
@@ -77,6 +90,7 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
 
       await onUpdateMealPlan(newPlan);
       confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+      triggerHaptic('success');
     } catch (err: any) {
       alert(`Ошибка генерации рациона: ${err.message}`);
     } finally {
@@ -84,21 +98,47 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
     }
   };
 
-  // Автоматический сбор списка покупок из блюд недели
-  const generateShoppingList = () => {
-    const items = [
-      { name: 'Куриное филе охлажденное', amount: '800 г', inPantry: true },
-      { name: 'Творог 5%', amount: '400 г', inPantry: true },
-      { name: 'Яйца куриные С0', amount: '10 шт', inPantry: true },
-      { name: 'Сёмга или форель слабосолёная', amount: '200 г', inPantry: false },
-      { name: 'Свежий шпинат', amount: '150 г', inPantry: false },
-      { name: 'Овсяные хлопья длительной варки', amount: '1 уп', inPantry: true },
-      { name: 'Авокадо спелый', amount: '3 шт', inPantry: false },
-      { name: 'Греческий йогурт 2%', amount: '350 г', inPantry: false },
-      { name: 'Томаты Черри', amount: '300 г', inPantry: true },
-      { name: 'Оливковое масло Extra Virgin', amount: '1 бут', inPantry: false },
+  const handleSingleMealReplace = async (meal: MealPlanItem) => {
+    if (!isPro) {
+      triggerHaptic('medium');
+      onOpenPaywall();
+      return;
+    }
+
+    if (!meal.id) return;
+    setReplacingMealId(meal.id);
+    triggerHaptic('light');
+
+    try {
+      await onReplaceMeal(meal.id, meal.mealType, meal.date);
+      triggerHaptic('success');
+    } catch (e: any) {
+      alert('Ошибка замены блюда: ' + e.message);
+    } finally {
+      setReplacingMealId(null);
+    }
+  };
+
+  const shoppingList = [
+    { name: 'Куриное филе охлажденное', amount: '800 г', inPantry: true },
+    { name: 'Творог 5%', amount: '400 г', inPantry: true },
+    { name: 'Яйца куриные С0', amount: '10 шт', inPantry: true },
+    { name: 'Сёмга или форель слабосолёная', amount: '200 г', inPantry: false },
+    { name: 'Свежий шпинат', amount: '150 г', inPantry: false },
+    { name: 'Овсяные хлопья длительной варки', amount: '1 уп', inPantry: true },
+    { name: 'Авокадо спелый', amount: '3 шт', inPantry: false },
+    { name: 'Греческий йогурт 2%', amount: '350 г', inPantry: false },
+    { name: 'Томаты Черри', amount: '300 г', inPantry: true },
+  ];
+
+  const handleShareTelegram = () => {
+    triggerHaptic('success');
+    const lines = [
+      '🛒 Список покупок на неделю (FoodKeeper):',
+      ...shoppingList.map((item) => `- [ ] ${item.name} (${item.amount}) ${item.inPantry ? '✅ есть' : '🛒 купить'}`),
+      '\nСобрано в FoodKeeper PWA',
     ];
-    return items;
+    shareTextToTelegram(lines.join('\n'));
   };
 
   return (
@@ -115,7 +155,10 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
         </div>
 
         <button
-          onClick={() => setIsShoppingOpen(true)}
+          onClick={() => {
+            triggerHaptic('light');
+            setIsShoppingOpen(true);
+          }}
           className="p-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
           title="Список покупок"
         >
@@ -127,27 +170,39 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
       <div className="glass-card rounded-3xl p-4 bg-gradient-to-r from-emerald-600/10 via-teal-500/10 to-transparent border border-emerald-500/20 flex items-center justify-between">
         <div className="space-y-0.5">
           <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4" /> ИИ-планировщик (Gemini)
+            <Sparkles className="w-4 h-4" /> ИИ-планировщик на 7 дней
+            {!isPro && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-black">
+                PRO
+              </span>
+            )}
           </span>
           <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            Составит сбалансированное меню на 7 дней из запасов холодильника
+            {isPro
+              ? 'Составит сбалансированное меню на 7 дней из запасов холодильника'
+              : 'Доступно в PRO-тарифе (499 ₽/мес)'}
           </p>
         </div>
 
         <button
           onClick={handleGenerateWeekly}
           disabled={generating}
-          className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 shrink-0 hover:opacity-95 disabled:opacity-50"
+          className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 shrink-0 hover:opacity-95 disabled:opacity-50 active:scale-95 transition-all"
         >
           {generating ? (
             <>
               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
               <span>Генерация...</span>
             </>
-          ) : (
+          ) : isPro ? (
             <>
               <Sparkles className="w-3.5 h-3.5" />
               <span>Собрать план</span>
+            </>
+          ) : (
+            <>
+              <Zap className="w-3.5 h-3.5 fill-white" />
+              <span>Открыть PRO</span>
             </>
           )}
         </button>
@@ -160,7 +215,10 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
           return (
             <button
               key={d.offset}
-              onClick={() => setSelectedDayOffset(d.offset)}
+              onClick={() => {
+                triggerHaptic('light');
+                setSelectedDayOffset(d.offset);
+              }}
               className={`flex-1 min-w-[3rem] py-2.5 rounded-2xl flex flex-col items-center justify-center transition-all ${
                 isSelected
                   ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
@@ -201,15 +259,14 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
               На этот день пока нет плана
             </p>
             <p className="text-[11px] text-zinc-400">
-              Нажмите «Собрать план» для автоматического расчета ИИ
+              {isPro ? 'Нажмите «Собрать план» для автоматического расчета ИИ' : 'Перейдите на PRO для авто-генерации меню'}
             </p>
           </div>
         ) : (
           sortedMeals.map((meal) => (
             <div
               key={meal.id}
-              onClick={() => meal.id && onToggleMeal(meal.id, !meal.completed)}
-              className={`glass-card rounded-3xl p-4 transition-all cursor-pointer ${
+              className={`glass-card rounded-3xl p-4 transition-all ${
                 meal.completed
                   ? 'bg-emerald-500/5 border-emerald-500/30'
                   : 'hover:border-zinc-300 dark:hover:border-white/20'
@@ -217,7 +274,13 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-3">
-                  <button className="mt-0.5 text-zinc-400 focus:outline-none">
+                  <button
+                    onClick={() => {
+                      triggerHaptic('light');
+                      meal.id && onToggleMeal(meal.id, !meal.completed);
+                    }}
+                    className="mt-0.5 text-zinc-400 focus:outline-none"
+                  >
                     {meal.completed ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500/20" />
                     ) : (
@@ -249,12 +312,38 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
                   </p>
                 </div>
               </div>
+
+              {/* Точечная замена блюда (PRO фича) */}
+              <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                <button
+                  onClick={() => handleSingleMealReplace(meal)}
+                  disabled={replacingMealId === meal.id}
+                  className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:underline"
+                >
+                  {replacingMealId === meal.id ? (
+                    <>
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      <span>ИИ подбирает замену...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shuffle className="w-3 h-3" />
+                      <span>Заменить только это блюдо</span>
+                      {!isPro && (
+                        <span className="text-[9px] px-1 py-0.2 bg-amber-500/15 text-amber-500 rounded font-bold">
+                          PRO
+                        </span>
+                      )}
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
 
-      {/* Модальное окно списка покупок на неделю */}
+      {/* Модальное окно списка покупок на неделю с экспортом в Telegram */}
       {isShoppingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
@@ -277,14 +366,15 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
               <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
                 Сформировано автоматически по ингредиентам из недельного меню:
               </p>
-              {generateShoppingList().map((item, i) => {
+              {shoppingList.map((item, i) => {
                 const isChecked = checkedItems[item.name];
                 return (
                   <div
                     key={i}
-                    onClick={() =>
-                      setCheckedItems((prev) => ({ ...prev, [item.name]: !prev[item.name] }))
-                    }
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setCheckedItems((prev) => ({ ...prev, [item.name]: !prev[item.name] }));
+                    }}
                     className={`flex items-center justify-between p-2.5 rounded-2xl cursor-pointer transition-all ${
                       isChecked
                         ? 'bg-zinc-100/60 dark:bg-zinc-800/40 text-zinc-400 line-through'
@@ -317,12 +407,18 @@ export const PlannerScreen: React.FC<PlannerScreenProps> = ({
               })}
             </div>
 
-            <div className="p-4 border-t border-zinc-200/80 dark:border-white/5">
+            <div className="p-4 border-t border-zinc-200/80 dark:border-white/5 flex gap-2">
+              <button
+                onClick={handleShareTelegram}
+                className="flex-1 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
+              >
+                <Send className="w-4 h-4" /> Отправить в Telegram
+              </button>
               <button
                 onClick={() => setIsShoppingOpen(false)}
-                className="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20"
+                className="px-4 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold"
               >
-                Готово
+                Закрыть
               </button>
             </div>
           </div>

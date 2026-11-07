@@ -1,9 +1,12 @@
-import { Sparkles, Moon, Sun, Settings2, ShieldCheck } from 'lucide-react';
+import React from 'react';
+import { Sparkles, Moon, Sun, Settings2, Zap } from 'lucide-react';
 import type { UserProfile } from '../types';
+import { triggerHaptic } from '../services/telegram';
 
 interface HeaderProps {
   profile?: UserProfile;
   onOpenSettings: () => void;
+  onOpenPaywall: () => void;
   onToggleTheme: () => void;
   isDark: boolean;
 }
@@ -11,11 +14,11 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   profile,
   onOpenSettings,
+  onOpenPaywall,
   onToggleTheme,
   isDark,
 }) => {
-  const hasCustomProxy = Boolean(profile?.geminiProxyUrl?.trim());
-  const hasKey = Boolean(profile?.geminiApiKey?.trim());
+  const isPro = profile?.subscriptionTier === 'pro';
 
   return (
     <header className="sticky top-0 z-30 safe-top glass border-b border-zinc-200/60 dark:border-white/5 transition-colors">
@@ -29,9 +32,15 @@ export const Header: React.FC<HeaderProps> = ({
               <h1 className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
                 FoodKeeper
               </h1>
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                PWA
-              </span>
+              {isPro ? (
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-sm shadow-amber-500/30">
+                  PRO
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  PWA
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               Привет, {profile?.name || 'пользователь'}!
@@ -40,25 +49,37 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-          {/* Индикатор статуса ИИ / Прокси */}
-          <button
-            onClick={onOpenSettings}
-            className={`px-2 py-1 rounded-xl text-[11px] font-medium flex items-center space-x-1 transition-all ${
-              hasKey
-                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-            }`}
-            title="Настройки ИИ и Прокси"
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">
-              {hasCustomProxy ? 'Proxy AI' : hasKey ? 'Gemini AI' : 'Демо AI'}
-            </span>
-          </button>
+          {/* Бейдж тарифа / кнопка Upgrade */}
+          {isPro ? (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenPaywall();
+              }}
+              className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1"
+            >
+              <Zap className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+              <span>PRO Активен</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                triggerHaptic('medium');
+                onOpenPaywall();
+              }}
+              className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-md shadow-amber-500/20 flex items-center gap-1 hover:opacity-95 transform active:scale-95 transition-all"
+            >
+              <Zap className="w-3.5 h-3.5 fill-white" />
+              <span>Тариф PRO</span>
+            </button>
+          )}
 
           {/* Переключатель темы */}
           <button
-            onClick={onToggleTheme}
+            onClick={() => {
+              triggerHaptic('light');
+              onToggleTheme();
+            }}
             className="w-8 h-8 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
             aria-label="Сменить тему"
           >
@@ -67,7 +88,10 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Кнопка настроек */}
           <button
-            onClick={onOpenSettings}
+            onClick={() => {
+              triggerHaptic('light');
+              onOpenSettings();
+            }}
             className="w-8 h-8 rounded-xl flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/60 transition-colors"
             aria-label="Настройки"
           >

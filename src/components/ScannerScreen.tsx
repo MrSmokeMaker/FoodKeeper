@@ -1,25 +1,29 @@
 import { useState, useRef } from 'react';
-import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { Product, ProductCategory, UserProfile } from '../types';
 import { parseProductLabel } from '../services/gemini';
+import { triggerHaptic } from '../services/telegram';
 
 interface ScannerScreenProps {
   profile: UserProfile;
   onAddProduct: (product: Omit<Product, 'id' | 'addedAt'>) => Promise<void>;
   onNavigateToFridge: () => void;
-  onOpenSettings: () => void;
+  onOpenPaywall: () => void;
+  onIncrementScanCount: () => Promise<void>;
 }
 
-export const ScannerScreen: React.FC<ScannerScreenProps> = ({
+export const ScannerScreen = ({
   profile,
   onAddProduct,
   onNavigateToFridge,
-  onOpenSettings,
-}) => {
+  onOpenPaywall,
+  onIncrementScanCount,
+}: ScannerScreenProps) => {
   const [image, setImage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
 
   // Распознанные поля
   const [name, setName] = useState('');
@@ -35,14 +39,49 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isPro = profile.subscriptionTier === 'pro';
+  const scansLeft = Math.max(0, 3 - (profile.dailyScansUsed || 0));
+
+  // Определение штрихкода через Web BarcodeDetector API (если поддерживается браузером)
+  const tryDetectBarcode = async (imgElement: HTMLImageElement) => {
+    if ('BarcodeDetector' in window) {
+      try {
+        const barcodeDetector = new (window as any).BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'qr_code', 'upc_a', 'upc_e'],
+        });
+        const barcodes = await barcodeDetector.detect(imgElement);
+        if (barcodes.length > 0) {
+          const code = barcodes[0].rawValue;
+          setBarcodeResult(code);
+          triggerHaptic('light');
+        }
+      } catch (e) {
+        console.warn('BarcodeDetector not active on this image', e);
+      }
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // Проверка лимитов для Free-тарифа
+    if (!isPro && scansLeft <= 0) {
+      triggerHaptic('medium');
+      onOpenPaywall();
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {
       const base64 = reader.result as string;
       setImage(base64);
+
+      // Пробуем распознать штрихкод параллельно
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => tryDetectBarcode(img);
+
       runVisionAnalysis(base64);
     };
     reader.readAsDataURL(file);
@@ -55,7 +94,6 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
 
     try {
       const result = await parseProductLabel(base64, {
-        apiKey: profile.geminiApiKey,
         proxyUrl: profile.geminiProxyUrl,
       });
 
@@ -68,6 +106,9 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
       if (result.fat !== undefined) setFat(result.fat);
       if (result.carbs !== undefined) setCarbs(result.carbs);
       if (result.expiryDate) setExpiryDate(result.expiryDate);
+
+      await onIncrementScanCount();
+      triggerHaptic('success');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Ошибка распознавания этикетки.');
@@ -88,6 +129,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
       protein,
       fat,
       carbs,
+      barcode: barcodeResult || undefined,
       expiryDate: expiryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
     });
 
@@ -99,41 +141,38 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
     });
 
     setIsSuccess(true);
+    triggerHaptic('success');
     setTimeout(() => {
       onNavigateToFridge();
-    }, 1200);
+    }, 1000);
   };
 
   return (
     <div className="space-y-4 pb-24">
       {/* Заголовок */}
-      <div>
-        <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-          <Camera className="w-5 h-5 text-emerald-500" /> Скан этикетки с ИИ
-        </h2>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Сфотографируйте таблицу КБЖУ или упаковку для мгновенного добавления
-        </p>
-      </div>
-
-      {/* Статус Gemini & Прокси */}
-      <div className="glass-card rounded-2xl p-3 flex items-center justify-between text-xs">
-        <div className="flex items-center space-x-2">
-          <ShieldCheck className="w-4 h-4 text-emerald-500" />
-          <span className="text-zinc-600 dark:text-zinc-300">
-            {profile.geminiApiKey
-              ? profile.geminiProxyUrl
-                ? 'ИИ активен (через прокси)'
-                : 'ИИ активен (прямой Google)'
-              : 'Демо-режим (введите ключ в настройках)'}
-          </span>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <Camera className="w-5 h-5 text-emerald-500" /> Гибридный сканер
+          </h2>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            Распознавание штрихкодов и таблиц КБЖУ через ИИ
+          </p>
         </div>
-        <button
-          onClick={onOpenSettings}
-          className="text-emerald-600 dark:text-emerald-400 font-bold hover:underline"
-        >
-          Настроить
-        </button>
+
+        {/* Статус лимита сканов */}
+        {isPro ? (
+          <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1">
+            <Zap className="w-3 h-3 fill-amber-500" /> Безлимит PRO
+          </span>
+        ) : (
+          <button
+            onClick={onOpenPaywall}
+            className="text-[11px] font-bold px-2 py-1 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:text-amber-500 flex items-center gap-1"
+          >
+            <span>Осталось сканов: {scansLeft} / 3</span>
+          </button>
+        )}
       </div>
 
       {/* Зона загрузки фото / превью */}
@@ -145,10 +184,15 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
               alt="Скан этикетки"
               className="max-h-56 rounded-2xl object-contain shadow-md"
             />
+            {barcodeResult && (
+              <div className="mt-2 px-2.5 py-1 bg-zinc-900 text-emerald-400 rounded-lg text-[11px] font-mono flex items-center gap-1.5 shadow-md border border-emerald-500/30">
+                <Barcode className="w-3.5 h-3.5" /> Штрихкод: {barcodeResult}
+              </div>
+            )}
             {loading && (
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center text-white space-y-2">
                 <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
-                <span className="text-xs font-semibold">Gemini Vision читает КБЖУ...</span>
+                <span className="text-xs font-semibold">ИИ анализирует состав и КБЖУ...</span>
                 <div className="w-32 h-1 bg-white/20 rounded-full overflow-hidden">
                   <div className="w-full h-full bg-emerald-400 animate-pulse" />
                 </div>
@@ -177,18 +221,18 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
             </div>
             <div>
               <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                Сделайте снимок или выберите фото
+                Сделайте снимок этикетки или штрихкода
               </p>
               <p className="text-[11px] text-zinc-400 mt-0.5">
-                Камера определит название, КБЖУ, вес и срок хранения
+                ИИ автоматически извлечет пищевую ценность на 100г
               </p>
             </div>
             <div className="flex gap-2 justify-center">
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 active:scale-95 transition-all"
               >
-                <Upload className="w-4 h-4" /> Выбрать фото
+                <Upload className="w-4 h-4" /> Сканировать камерой
               </button>
             </div>
           </div>
@@ -325,7 +369,7 @@ export const ScannerScreen: React.FC<ScannerScreenProps> = ({
           <button
             onClick={handleSaveToFridge}
             disabled={isSuccess || !name}
-            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all mt-3"
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 transition-all mt-3 active:scale-95"
           >
             {isSuccess ? (
               <>

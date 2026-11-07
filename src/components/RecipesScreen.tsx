@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { Recipe, Product, UserProfile } from '../types';
 import { parseRecipeFromWeb } from '../services/gemini';
+import { triggerHaptic } from '../services/telegram';
 
 interface RecipesScreenProps {
   recipes: Recipe[];
@@ -10,21 +11,25 @@ interface RecipesScreenProps {
   profile: UserProfile;
   onAddRecipe: (recipe: Omit<Recipe, 'id' | 'createdAt'>) => Promise<void>;
   onCookRecipe: (recipe: Recipe) => Promise<void>;
+  onOpenPaywall: () => void;
 }
 
-export const RecipesScreen: React.FC<RecipesScreenProps> = ({
+export const RecipesScreen = ({
   recipes,
   pantryProducts,
   profile,
   onAddRecipe,
   onCookRecipe,
-}) => {
+  onOpenPaywall,
+}: RecipesScreenProps) => {
   const [activeTab, setActiveTab] = useState<'pantry' | 'catalog'>('pantry');
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importInput, setImportInput] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+
+  const isPro = profile.subscriptionTier === 'pro';
 
   // Расчет процента совпадения ингредиентов с холодильником
   const getPantryMatch = (recipe: Recipe) => {
@@ -35,7 +40,6 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
 
     recipe.ingredients.forEach((ing) => {
       const ingName = ing.name.toLowerCase();
-      // Нечеткое совпадение по подстроке
       const hasItem = lowerPantry.some(
         (pName) => pName.includes(ingName) || ingName.includes(pName)
       );
@@ -49,16 +53,25 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
     };
   };
 
+  const handleOpenImport = () => {
+    triggerHaptic('light');
+    if (!isPro) {
+      onOpenPaywall();
+      return;
+    }
+    setIsImportModalOpen(true);
+  };
+
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importInput.trim()) return;
 
     setImportLoading(true);
     setImportError(null);
+    triggerHaptic('light');
 
     try {
       const parsed = await parseRecipeFromWeb(importInput.trim(), {
-        apiKey: profile.geminiApiKey,
         proxyUrl: profile.geminiProxyUrl,
       });
 
@@ -66,6 +79,7 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
       setIsImportModalOpen(false);
       setImportInput('');
       confetti({ particleCount: 40, spread: 50 });
+      triggerHaptic('success');
     } catch (err: any) {
       setImportError(err.message || 'Не удалось импортировать рецепт.');
     } finally {
@@ -74,12 +88,12 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
   };
 
   const handleCook = async (recipe: Recipe) => {
+    triggerHaptic('success');
     await onCookRecipe(recipe);
     confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
     setSelectedRecipe(null);
   };
 
-  // Сортировка для таба "Из холодильника" по проценту наличия продуктов
   const sortedRecipes = [...recipes].sort((a, b) => {
     if (activeTab === 'pantry') {
       const matchA = getPantryMatch(a).percent;
@@ -103,17 +117,26 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
         </div>
 
         <button
-          onClick={() => setIsImportModalOpen(true)}
+          onClick={handleOpenImport}
           className="px-3 py-1.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center gap-1.5 hover:opacity-95"
         >
-          <Globe className="w-3.5 h-3.5" /> Импорт из сети
+          <Globe className="w-3.5 h-3.5" />
+          <span>Импорт</span>
+          {!isPro && (
+            <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-black">
+              PRO
+            </span>
+          )}
         </button>
       </div>
 
       {/* Переключатель табов */}
       <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl">
         <button
-          onClick={() => setActiveTab('pantry')}
+          onClick={() => {
+            triggerHaptic('light');
+            setActiveTab('pantry');
+          }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
             activeTab === 'pantry'
               ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
@@ -123,14 +146,17 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
           Из моего холодильника
         </button>
         <button
-          onClick={() => setActiveTab('catalog')}
+          onClick={() => {
+            triggerHaptic('light');
+            setActiveTab('catalog');
+          }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
             activeTab === 'catalog'
               ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
-          Интернет-библиотека ({recipes.length})
+          Библиотека ({recipes.length})
         </button>
       </div>
 
@@ -142,7 +168,10 @@ export const RecipesScreen: React.FC<RecipesScreenProps> = ({
           return (
             <div
               key={recipe.id}
-              onClick={() => setSelectedRecipe(recipe)}
+              onClick={() => {
+                triggerHaptic('light');
+                setSelectedRecipe(recipe);
+              }}
               className="glass-card rounded-3xl p-4 cursor-pointer hover:border-emerald-500/40 transition-all shadow-sm group"
             >
               <div className="flex items-start justify-between gap-2">
