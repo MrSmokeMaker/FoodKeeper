@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="fkGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="sparkleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ee7b7" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#fkGrad)" />
+  <path d="M256 110C175.369 110 110 175.369 110 256C110 336.631 175.369 402 256 402C336.631 402 402 336.631 402 256C402 175.369 336.631 110 256 110Z" fill="white" fill-opacity="0.12" />
+  <!-- Refrigerator & Nutrition Leaf -->
+  <path d="M180 160C180 148.954 188.954 140 200 140H312C323.046 140 332 148.954 332 160V230H180V160Z" fill="white" />
+  <path d="M180 245H332V352C332 363.046 323.046 372 312 372H200C188.954 372 180 363.046 180 352V245Z" fill="white" />
+  <rect x="200" y="175" width="8" height="30" rx="4" fill="#047857" />
+  <rect x="200" y="270" width="8" height="45" rx="4" fill="#047857" />
+  <!-- AI Sparkle -->
+  <path d="M345 130L352 148L370 155L352 162L345 180L338 162L320 155L338 148L345 130Z" fill="url(#sparkleGrad)" />
+</svg>
