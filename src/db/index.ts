@@ -35,7 +35,7 @@ export async function seedInitialDataIfNeeded() {
       targetProtein: 140,
       targetFat: 70,
       targetCarbs: 220,
-      geminiApiKey: '',
+      geminiApiKey: (import.meta.env.VITE_GEMINI_API_KEY as string)?.trim() || '',
       geminiProxyUrl: '', // По умолчанию прямой запрос или кастомный прокси
       theme: 'dark',
     });

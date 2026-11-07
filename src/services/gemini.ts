@@ -16,6 +16,10 @@ function cleanJsonString(str: string): string {
     .trim();
 }
 
+export function getEffectiveApiKey(key?: string): string {
+  return key?.trim() || (import.meta.env.VITE_GEMINI_API_KEY as string)?.trim() || '';
+}
+
 /**
  * Вызов Gemini API с поддержкой кастомного прокси (для обхода региональных ограничений)
  */
@@ -24,14 +28,15 @@ async function callGemini(
   options: GeminiRequestOptions,
   imageBase64?: string
 ): Promise<string> {
-  const { apiKey, proxyUrl } = options;
+  const apiKey = getEffectiveApiKey(options.apiKey);
+  const { proxyUrl } = options;
   if (!apiKey) {
-    throw new Error('API ключ Gemini не указан в настройках.');
+    throw new Error('API ключ Gemini не указан в настройках или .env.');
   }
 
   // Если указан прокси, нормализуем URL
   const baseUrl = proxyUrl?.trim() ? proxyUrl.trim().replace(/\/+$/, '') : DEFAULT_BASE_URL;
-  // Используем быструю и точную модель gemini-1.5-flash / gemini-2.0-flash
+  // Используем быструю и точную модель gemini-1.5-flash
   const model = 'gemini-1.5-flash';
   const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -90,7 +95,8 @@ export async function parseProductLabel(
   imageBase64: string,
   options: GeminiRequestOptions
 ): Promise<Partial<Product>> {
-  if (!options.apiKey) {
+  const activeKey = getEffectiveApiKey(options.apiKey);
+  if (!activeKey) {
     // Реалистичная симуляция, если ключ ещё не введён
     await new Promise((r) => setTimeout(r, 1200));
     return {
@@ -123,7 +129,7 @@ export async function parseProductLabel(
 Если какой-то параметр не виден на этикетке, определи его по средним табличным значениям для данного продукта.
 `;
 
-  const jsonStr = await callGemini(prompt, options, imageBase64);
+  const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey }, imageBase64);
   const parsed = JSON.parse(jsonStr);
 
   const expiry = new Date(Date.now() + (parsed.daysUntilExpiry || 7) * 86400000)
@@ -150,7 +156,8 @@ export async function parseRecipeFromWeb(
   input: string,
   options: GeminiRequestOptions
 ): Promise<Omit<Recipe, 'id' | 'createdAt'>> {
-  if (!options.apiKey) {
+  const activeKey = getEffectiveApiKey(options.apiKey);
+  if (!activeKey) {
     await new Promise((r) => setTimeout(r, 1200));
     return {
       title: 'Паста с лососем и брокколи в сливочном соусе',
@@ -207,7 +214,7 @@ export async function parseRecipeFromWeb(
 }
 `;
 
-  const jsonStr = await callGemini(prompt, options);
+  const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey });
   const parsed = JSON.parse(jsonStr);
 
   return {
@@ -237,9 +244,10 @@ export async function generateWeeklyPlanWithAI(
   options: GeminiRequestOptions,
   startDateStr: string
 ): Promise<MealPlanItem[]> {
+  const activeKey = getEffectiveApiKey(options.apiKey);
   const pantryNames = pantryItems.map((p) => `${p.name} (${p.quantity} ${p.unit})`).join(', ');
 
-  if (!options.apiKey) {
+  if (!activeKey) {
     await new Promise((r) => setTimeout(r, 1500));
     // Генерируем 7 дней по 4 приёма
     const generated: MealPlanItem[] = [];
@@ -328,7 +336,7 @@ export async function generateWeeklyPlanWithAI(
 ]
 `;
 
-  const jsonStr = await callGemini(prompt, options);
+  const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey });
   const parsed = JSON.parse(jsonStr);
 
   return parsed.map((item: any) => ({
