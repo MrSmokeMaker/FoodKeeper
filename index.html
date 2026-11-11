@@ -2,21 +2,103 @@
 <html lang="ru" class="dark">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- Основные мета-теги SEO -->
+    <title>FoodKeeper — Умный трекер питания, холодильник и рацион на неделю</title>
+    <meta name="title" content="FoodKeeper — Умный трекер питания, холодильник и рацион на неделю" />
+    <meta name="description" content="Умный PWA-трекер питания и срока годности продуктов: контроль запасов холодильника, генератор рациона на 7 дней из 1000 рецептов, точный расчет КБЖУ, Zero-Waste и умный список покупок." />
+    <meta name="keywords" content="трекер питания, контроль холодильника, срок годности продуктов, рацион на неделю, расчет кбжу, меню на 7 дней, рецепты блюд, список покупок, zero waste еда, pwa приложение, трекер калорий" />
+    <meta name="author" content="FoodKeeper Team" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://mrsmokemaker.github.io/FoodKeeper/" />
+
+    <!-- Open Graph / Facebook / VK / Telegram -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://mrsmokemaker.github.io/FoodKeeper/" />
+    <meta property="og:site_name" content="FoodKeeper" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:title" content="FoodKeeper — Умный трекер питания и рацион на неделю" />
+    <meta property="og:description" content="Контролируйте сроки годности продуктов, составляйте сбалансированное меню на 7 дней из 1000 рецептов, экономьте бюджет с Zero-Waste и ведите умный список покупок." />
+    <meta property="og:image" content="https://mrsmokemaker.github.io/FoodKeeper/og-image.svg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Превью приложения FoodKeeper — трекер питания и холодильник" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://mrsmokemaker.github.io/FoodKeeper/" />
+    <meta name="twitter:title" content="FoodKeeper — Умный трекер питания и рацион на неделю" />
+    <meta name="twitter:description" content="Умный помощник по питанию: контроль холодильника, рацион на 7 дней, КБЖУ и умный список покупок." />
+    <meta name="twitter:image" content="https://mrsmokemaker.github.io/FoodKeeper/og-image.svg" />
+
+    <!-- Иконки и PWA -->
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./favicon.svg" />
+    <meta name="theme-color" content="#10b981" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#10b981" />
-    <title>FoodKeeper — Умный трекер питания и холодильник</title>
+    <meta name="apple-mobile-web-app-title" content="FoodKeeper" />
+    <meta name="application-name" content="FoodKeeper" />
+    <meta name="format-detection" content="telephone=no" />
+
     <!-- Telegram Web App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <!-- Шрифты Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <script type="module" crossorigin src="./assets/index-CCaTl5bR.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DbaiQnvY.css">
+
+    <!-- Schema.org Микроразметка (JSON-LD) для поисковых роботов -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "FoodKeeper",
+      "url": "https://mrsmokemaker.github.io/FoodKeeper/",
+      "description": "Умный PWA-трекер питания и срока годности продуктов: контроль запасов холодильника, генератор рациона на 7 дней из 1000 рецептов, точный расчет КБЖУ, Zero-Waste и умный список покупок.",
+      "applicationCategory": "HealthApplication, FoodAndDrink",
+      "operatingSystem": "All (Web, iOS, Android, Telegram)",
+      "browserRequirements": "Requires JavaScript. Requires HTML5.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "RUB"
+      },
+      "featureList": [
+        "Умный контроль запасов холодильника и сроков годности продуктов",
+        "Генератор сбалансированного недельного рациона (28 блюд) из базы 1000 рецептов",
+        "Zero-Waste режим спасения продуктов с истекающим сроком",
+        "Закрепление (Pin/Lock) любимых блюд в рационе",
+        "Автоматический расчет КБЖУ и контроль суточной нормы калорий",
+        "Умный список покупок с расчетом дефицита ингредиентов",
+        "Сканер штрихкодов Open Food Facts и этикеток продуктов",
+        "100% автономная работа офлайн через IndexedDB"
+      ]
+    }
+    </script>
+    <script type="module" crossorigin src="./assets/index-BPItEOwu.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BNY7HnFB.css">
   <link rel="manifest" href="./manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="./registerSW.js"></script></head>
   <body class="bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50 antialiased selection:bg-emerald-500/30 selection:text-emerald-400 select-none touch-manipulation">
-    <div id="root"></div>
+    <!-- Семантический контент для поисковых краулеров без выполнения JavaScript -->
+    <noscript>
+      <div style="padding: 24px; font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h1>FoodKeeper — Умный трекер питания, холодильник и рацион на неделю</h1>
+        <p>FoodKeeper — современное прогрессивное веб-приложение (PWA) для эффективного управления домашними продуктами, контроля сроков годности и автоматического составления сбалансированного меню.</p>
+        <h2>Основные возможности:</h2>
+        <ul>
+          <li><strong>Контроль холодильника:</strong> учет сроков годности и своевременные уведомления.</li>
+          <li><strong>Рацион на 7 дней:</strong> автоматический подбор 28 приемов пищи из каталога 1000 проверенных блюд.</li>
+          <li><strong>Zero-Waste:</strong> подбор рецептов для первоочередного спасения продуктов.</li>
+          <li><strong>Умный список покупок:</strong> расчет недостающих ингредиентов для выбранных блюд.</li>
+          <li><strong>Расчет КБЖУ:</strong> суточная норма калорий, белков, жиров и углеводов.</li>
+        </ul>
+        <p>Для полноценной интерактивной работы включите поддержку JavaScript в вашем браузере.</p>
+      </div>
+    </noscript>
+
+    <div id="root"></div>
   </body>
 </html>
