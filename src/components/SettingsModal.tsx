@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { X, Target, Calculator, Check, Zap, Globe } from 'lucide-react';
+import { X, Target, Calculator, Check, Zap, Globe, Bell, ShieldAlert, Utensils } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
+import { requestNotificationPermission, isNotificationSupported } from '../services/notifications';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -29,6 +30,16 @@ export const SettingsModal = ({
   const [targetCarbs, setTargetCarbs] = useState(profile?.targetCarbs || 210);
   const [currentWeight, setCurrentWeight] = useState(profile?.currentWeight || 75);
   const [targetWeight, setTargetWeight] = useState(profile?.targetWeight || 70);
+
+  // Диета, аллергены и уведомления
+  const [diet, setDiet] = useState<'none' | 'vegetarian' | 'low_carb' | 'high_protein'>(
+    profile?.diet || 'none'
+  );
+  const [allergens, setAllergens] = useState<string[]>(profile?.allergens || []);
+  const [customAllergen, setCustomAllergen] = useState('');
+  const [notificationsEnabled, setNotificationsEnabled] = useState<boolean>(
+    profile?.notificationsEnabled || false
+  );
 
   const [saved, setSaved] = useState(false);
   const [calcOpen, setCalcOpen] = useState(false);
@@ -64,6 +75,37 @@ export const SettingsModal = ({
     triggerHaptic('medium');
   };
 
+  const toggleAllergen = (item: string) => {
+    triggerHaptic('light');
+    setAllergens((prev) =>
+      prev.includes(item) ? prev.filter((a) => a !== item) : [...prev, item]
+    );
+  };
+
+  const handleAddCustomAllergen = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customAllergen.trim()) return;
+    const clean = customAllergen.trim().toLowerCase();
+    if (!allergens.includes(clean)) {
+      setAllergens([...allergens, clean]);
+    }
+    setCustomAllergen('');
+    triggerHaptic('light');
+  };
+
+  const handleToggleNotifications = async () => {
+    triggerHaptic('light');
+    if (!notificationsEnabled) {
+      const granted = await requestNotificationPermission();
+      setNotificationsEnabled(granted);
+      if (!granted) {
+        alert('Разрешение на уведомления не предоставлено в браузере');
+      }
+    } else {
+      setNotificationsEnabled(false);
+    }
+  };
+
   const handleSave = async () => {
     await onSaveProfile({
       name,
@@ -75,6 +117,9 @@ export const SettingsModal = ({
       targetCarbs,
       currentWeight,
       targetWeight,
+      diet,
+      allergens,
+      notificationsEnabled,
     });
     setSaved(true);
     triggerHaptic('success');
@@ -283,7 +328,7 @@ export const SettingsModal = ({
                   type="number"
                   value={targetFat}
                   onChange={(e) => setTargetFat(Number(e.target.value))}
-                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-amber-500"
+                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-amber-700 dark:text-amber-300/90"
                 />
               </div>
               <div>
@@ -296,6 +341,103 @@ export const SettingsModal = ({
                 />
               </div>
             </div>
+
+            {/* Стиль питания и диета */}
+            <div className="pt-2 border-t border-zinc-100 dark:border-white/5 space-y-1.5">
+              <label className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5">
+                <Utensils className="w-3.5 h-3.5 text-emerald-500" />
+                <span>Стиль питания (Диета):</span>
+              </label>
+              <select
+                value={diet}
+                onChange={(e) => setDiet(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100"
+              >
+                <option value="none">Обычный сбалансированный рацион</option>
+                <option value="vegetarian">Вегетарианство (без мяса и рыбы)</option>
+                <option value="high_protein">Высокобелковый (спорт / фитнес)</option>
+                <option value="low_carb">Низкоуглеводный / Кето</option>
+              </select>
+            </div>
+
+            {/* Аллергены и исключаемые продукты */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200 flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                <span>Исключаемые аллергены и продукты:</span>
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {['рыба', 'молоко', 'орехи', 'глютен', 'свинина', 'яйца'].map((item) => {
+                  const active = allergens.includes(item);
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => toggleAllergen(item)}
+                      className={`px-2.5 py-1 rounded-xl text-[11px] font-medium transition-all ${
+                        active
+                          ? 'bg-rose-500 text-white shadow-xs font-semibold'
+                          : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200'
+                      }`}
+                    >
+                      {active ? `✕ ${item}` : `+ ${item}`}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Ручной ввод аллергена */}
+              <div className="flex gap-1.5 pt-1">
+                <input
+                  type="text"
+                  value={customAllergen}
+                  onChange={(e) => setCustomAllergen(e.target.value)}
+                  placeholder="Добавить свой (напр. арахис, мед)..."
+                  className="flex-1 px-2.5 py-1 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCustomAllergen}
+                  className="px-3 py-1 bg-zinc-200 dark:bg-zinc-800 hover:bg-zinc-300 dark:hover:bg-zinc-700 text-xs font-semibold rounded-xl text-zinc-800 dark:text-zinc-200"
+                >
+                  Добавить
+                </button>
+              </div>
+
+              {allergens.length > 0 && (
+                <div className="text-[10px] text-zinc-400">
+                  Будут исключены из рациона: {allergens.join(', ')}
+                </div>
+              )}
+            </div>
+
+            {/* Браузерные PWA-уведомления */}
+            {isNotificationSupported() && (
+              <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    <Bell className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Напоминания о сроках годности</span>
+                  </span>
+                  <p className="text-[10px] text-zinc-400">
+                    Браузерные уведомления при истечении срока продуктов
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleToggleNotifications}
+                  className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                    notificationsEnabled ? 'bg-emerald-500' : 'bg-zinc-300 dark:bg-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`w-5 h-5 rounded-full bg-white transition-transform shadow-xs ${
+                      notificationsEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Расширенные настройки (Прокси) */}

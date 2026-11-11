@@ -15,6 +15,10 @@ import {
   Check,
   X,
   Plus,
+  Lock,
+  Unlock,
+  Search,
+  AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { MealPlanItem, Product, Recipe, UserProfile } from '../types';
@@ -28,9 +32,12 @@ interface PlannerScreenProps {
   mealPlan: MealPlanItem[];
   pantryProducts: Product[];
   recipes: Recipe[];
+  expiringProducts?: Product[];
   profile: UserProfile;
   onUpdateMealPlan: (items: MealPlanItem[]) => Promise<void>;
   onToggleMeal: (id: number, completed: boolean) => Promise<void>;
+  onToggleLockMeal?: (id: number, isLocked: boolean) => Promise<void>;
+  onSetSlotRecipe?: (mealId: number, recipe: Recipe) => Promise<void>;
   onReplaceMeal: (id: number, mealType: string, date: string, priority: MealPriority) => Promise<void>;
   onGenerateWeeklyPlan: (priority: MealPriority) => Promise<void>;
   onCookRecipe?: (recipe: Recipe, deductions?: DeductionItem[], missingToAdd?: MissingIngredientItem[]) => Promise<void>;
@@ -41,8 +48,11 @@ export const PlannerScreen = ({
   mealPlan,
   pantryProducts,
   recipes,
+  expiringProducts = [],
   profile,
   onToggleMeal,
+  onToggleLockMeal,
+  onSetSlotRecipe,
   onReplaceMeal,
   onGenerateWeeklyPlan,
   onCookRecipe,
@@ -55,6 +65,10 @@ export const PlannerScreen = ({
   const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null);
   const [cookingRecipe, setCookingRecipe] = useState<Recipe | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Состояние ручного выбора конкретного блюда из каталога
+  const [pickerMeal, setPickerMeal] = useState<MealPlanItem | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -105,16 +119,33 @@ export const PlannerScreen = ({
       await onGenerateWeeklyPlan(priority);
       confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
       triggerHaptic('success');
+      const lockedCount = mealPlan.filter((m) => m.isLocked).length;
+      const lockedNote = lockedCount > 0 ? ` (сохранено ${lockedCount} закр.)` : '';
       showToast(
-        priority === 'pantry'
-          ? 'Рацион на 7 дней составлен из продуктов в наличии!'
-          : 'Случайный рацион на 7 дней успешно сгенерирован!'
+        priority === 'zero_waste'
+          ? `Рацион сформирован для спасения продуктов${lockedNote}!`
+          : priority === 'pantry'
+          ? `Рацион составлен из запасов холодильника${lockedNote}!`
+          : `Случайное меню на 7 дней готово${lockedNote}!`
       );
     } catch (e: any) {
       alert('Ошибка при генерации меню: ' + e.message);
     } finally {
       setGenerating(false);
     }
+  };
+
+  // Переключение закрепления (lock/pin)
+  const handleToggleLock = async (meal: MealPlanItem) => {
+    if (!meal.id) return;
+    const newLock = !meal.isLocked;
+    triggerHaptic('light');
+    if (onToggleLockMeal) {
+      await onToggleLockMeal(meal.id, newLock);
+    } else {
+      await db.mealPlan.update(meal.id, { isLocked: newLock });
+    }
+    showToast(newLock ? 'Блюдо закреплено 🔒 (не изменится при генерации)' : 'Закрепление снято 🔓');
   };
 
   // Случайная замена одного блюда с учётом приоритета
@@ -131,6 +162,29 @@ export const PlannerScreen = ({
     } finally {
       setReplacingMealId(null);
     }
+  };
+
+  // Ручной выбор рецепта в слот
+  const handleSelectRecipeForSlot = async (recipe: Recipe) => {
+    if (!pickerMeal?.id) return;
+    triggerHaptic('success');
+    if (onSetSlotRecipe) {
+      await onSetSlotRecipe(pickerMeal.id, recipe);
+    } else {
+      await db.mealPlan.update(pickerMeal.id, {
+        title: recipe.title,
+        recipeId: recipe.id,
+        ingredients: recipe.ingredients,
+        calories: recipe.calories,
+        protein: recipe.protein,
+        fat: recipe.fat,
+        carbs: recipe.carbs,
+        completed: false,
+      });
+    }
+    setPickerMeal(null);
+    setPickerSearch('');
+    showToast(`Установлено: «${recipe.title}»`);
   };
 
   // Найти связанный рецепт в каталоге
@@ -162,7 +216,7 @@ export const PlannerScreen = ({
     };
   };
 
-  // Добавление недостающих ингредиентов конкретного блюда в список покупок
+  // Добавление недостающих ингредиентов конкретного блюда в покупки
   const handleAddMealToShopping = async (meal: MealPlanItem) => {
     const rec = findRecipeForMeal(meal);
     if (!rec) return;
@@ -237,13 +291,27 @@ export const PlannerScreen = ({
       `📋 Меню на ${dayName.toUpperCase()}, ${dateFormatted} (FoodKeeper):`,
       ...sortedMeals.map((m) => {
         const icon = mealLabels[m.mealType]?.icon || '🍴';
-        return `${icon} ${m.title} — ${m.calories} ккал (Б:${m.protein} Ж:${m.fat} У:${m.carbs})`;
+        const lockMark = m.isLocked ? ' 🔒' : '';
+        return `${icon} ${m.title}${lockMark} — ${m.calories} ккал (Б:${m.protein} Ж:${m.fat} У:${m.carbs})`;
       }),
       `\nИтого за день: ${dayTotals.calories} ккал (цель: ${profile.targetCalories} ккал)`,
       `Собрано в приложении FoodKeeper`,
     ];
     shareTextToTelegram(lines.join('\n'));
   };
+
+  // Фильтрация рецептов для окна ручного выбора в слот
+  const pickerRecipes = pickerMeal
+    ? recipes
+        .filter((r) => r.category === pickerMeal.mealType)
+        .filter((r) =>
+          pickerSearch.trim()
+            ? r.title.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+              r.ingredients.some((i) => i.name.toLowerCase().includes(pickerSearch.toLowerCase()))
+            : true
+        )
+        .slice(0, 30)
+    : [];
 
   return (
     <div className="space-y-4 pb-28">
@@ -287,49 +355,78 @@ export const PlannerScreen = ({
         </div>
       </div>
 
-      {/* Блок генерации рациона на 7 дней в одну кнопку */}
+      {/* Блок генерации рациона на 7 дней */}
       <div className="premium-card rounded-3xl p-4 space-y-3.5 border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-teal-500/[0.04]">
-        {/* Переключатель приоритета (Холодильник / Любое блюдо) */}
+        {/* Переключатель приоритета (Холодильник / Zero-Waste / Любое блюдо) */}
         <div>
-          <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1.5">
-            Приоритет подбора блюд:
-          </label>
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5">
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+              Приоритет подбора:
+            </label>
+            {expiringProducts.length > 0 && (
+              <span className="text-[10px] font-medium text-amber-800 dark:text-amber-200/90 bg-amber-500/10 px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                <AlertTriangle className="w-2.5 h-2.5" />
+                {expiringProducts.length} истекают
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5 text-center">
             <button
               type="button"
               onClick={() => {
                 triggerHaptic('light');
                 setPriority('pantry');
               }}
-              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`py-2 px-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 priority === 'pantry'
                   ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
               }`}
             >
-              <Refrigerator className="w-3.5 h-3.5" />
-              <span>Из холодильника</span>
+              <Refrigerator className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Холодильник</span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setPriority('zero_waste');
+              }}
+              className={`py-2 px-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+                priority === 'zero_waste'
+                  ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              <span className="truncate">Спасти еду</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
                 triggerHaptic('light');
                 setPriority('any');
               }}
-              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+              className={`py-2 px-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                 priority === 'any'
                   ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
               }`}
             >
-              <Shuffle className="w-3.5 h-3.5" />
-              <span>Любые блюда</span>
+              <Shuffle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Любые</span>
             </button>
           </div>
+
           <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 px-1">
-            {priority === 'pantry'
-              ? '🍏 Блюда подбираются с максимальным совпадением продуктов в ваших запасах.'
-              : '🎲 Случайный подбор среди всех 1000 блюд проверенной кулинарной базы.'}
+            {priority === 'zero_waste'
+              ? '♻️ В первую очередь расходует продукты из блока «Истекает срок».'
+              : priority === 'pantry'
+              ? '🍏 Подбор блюд с максимальным совпадением продуктов в запасах.'
+              : '🎲 Случайный подбор среди всех 1000 блюд кулинарной базы.'}
           </p>
         </div>
 
@@ -424,9 +521,9 @@ export const PlannerScreen = ({
                 key={meal.id || meal.title}
                 className={`premium-card rounded-3xl p-3.5 space-y-2.5 transition-all ${
                   meal.completed ? 'opacity-70 bg-zinc-50/50 dark:bg-zinc-900/40' : ''
-                }`}
+                } ${meal.isLocked ? 'border-l-4 border-l-emerald-500' : ''}`}
               >
-                {/* Заголовок приема пищи и статус выполнения */}
+                {/* Заголовок приема пищи, закрепление и статус выполнения */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <button
@@ -445,11 +542,30 @@ export const PlannerScreen = ({
                     <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
                       {mealLabels[meal.mealType]?.label || meal.mealType}
                     </span>
+                    {meal.isLocked && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-0.5">
+                        <Lock className="w-2.5 h-2.5" /> Закреплено
+                      </span>
+                    )}
                   </div>
 
-                  <span className="text-[11px] font-bold text-zinc-500">
-                    {meal.calories} ккал
-                  </span>
+                  <div className="flex items-center space-x-1.5">
+                    {/* Кнопка закрепления (Pin/Lock) */}
+                    <button
+                      onClick={() => handleToggleLock(meal)}
+                      className={`p-1.5 rounded-xl transition-colors ${
+                        meal.isLocked
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : 'text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200'
+                      }`}
+                      title={meal.isLocked ? 'Снять закрепление' : 'Закрепить (не менять при генерации)'}
+                    >
+                      {meal.isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                    </button>
+                    <span className="text-[11px] font-bold text-zinc-500">
+                      {meal.calories} ккал
+                    </span>
+                  </div>
                 </div>
 
                 {/* Название блюда и макросы */}
@@ -501,16 +617,12 @@ export const PlannerScreen = ({
                 {/* Панель действий карточки */}
                 <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between pl-7 text-xs">
                   <div className="flex items-center space-x-1">
-                    {/* Кнопка "Заменить" на случайное с учётом приоритета */}
+                    {/* Кнопка случайной замены */}
                     <button
                       onClick={() => handleReplaceSingleMeal(meal)}
                       disabled={isReplacing}
                       className="px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1.5 font-semibold text-[11px] active:scale-95 transition-all"
-                      title={
-                        priority === 'pantry'
-                          ? 'Заменить на блюдо из продуктов в холодильнике'
-                          : 'Заменить на любое блюдо'
-                      }
+                      title="Случайная замена блюда"
                     >
                       <Shuffle
                         className={`w-3.5 h-3.5 text-emerald-500 ${isReplacing ? 'animate-spin' : ''}`}
@@ -518,11 +630,24 @@ export const PlannerScreen = ({
                       <span>Заменить</span>
                     </button>
 
+                    {/* Кнопка ручного выбора из каталога */}
+                    <button
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setPickerMeal(meal);
+                      }}
+                      className="px-2 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1 font-semibold text-[11px] active:scale-95 transition-all"
+                      title="Выбрать конкретное блюдо из каталога"
+                    >
+                      <Search className="w-3.5 h-3.5 text-zinc-400" />
+                      <span className="hidden sm:inline">Выбрать</span>
+                    </button>
+
                     {/* Кнопка просмотра рецепта */}
                     {fullRecipe && (
                       <button
                         onClick={() => setViewingRecipe(fullRecipe)}
-                        className="px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1 font-semibold text-[11px] active:scale-95 transition-all"
+                        className="px-2 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1 font-semibold text-[11px] active:scale-95 transition-all"
                         title="Открыть рецепт"
                       >
                         <BookOpen className="w-3.5 h-3.5 text-zinc-400" />
@@ -569,6 +694,90 @@ export const PlannerScreen = ({
           <Plus className="w-4 h-4 text-emerald-500" />
           <span>Добавить недостающие продукты дня в список покупок</span>
         </button>
+      )}
+
+      {/* Модальное окно ручного выбора рецепта в слот */}
+      {pickerMeal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-fade-in">
+          <div className="premium-card rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-zinc-200 dark:border-white/10">
+            <div className="p-4 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                  <Search className="w-4 h-4 text-emerald-500" />
+                  <span>Выбрать {mealLabels[pickerMeal.mealType]?.label || pickerMeal.mealType}</span>
+                </h3>
+                <span className="text-[11px] text-zinc-400">
+                  Поиск среди блюд категории в базе
+                </span>
+              </div>
+              <button
+                onClick={() => setPickerMeal(null)}
+                className="w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center justify-center"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 border-b border-zinc-100 dark:border-white/5">
+              <input
+                type="text"
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+                placeholder="Поиск по названию или ингредиенту..."
+                className="w-full px-3 py-2 text-xs rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="p-3 overflow-y-auto space-y-2 flex-1">
+              {pickerRecipes.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-400">
+                  Рецептов не найдено
+                </div>
+              ) : (
+                pickerRecipes.map((r) => {
+                  const matchCount = r.ingredients.filter((i) =>
+                    pantryProducts.some((p) => p.name.toLowerCase().includes(i.name.toLowerCase()))
+                  ).length;
+
+                  return (
+                    <div
+                      key={r.id || r.title}
+                      onClick={() => handleSelectRecipeForSlot(r)}
+                      className="p-3 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10 cursor-pointer border border-zinc-100 dark:border-white/5 transition-colors flex items-center justify-between"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <h4 className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate">
+                          {r.title}
+                        </h4>
+                        <div className="flex items-center space-x-2 text-[10px] text-zinc-400 mt-0.5">
+                          <span>{r.calories} ккал</span>
+                          <span>•</span>
+                          <span>{r.prepTimeMinutes || 20} мин</span>
+                          {matchCount > 0 && (
+                            <>
+                              <span>•</span>
+                              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                                {matchCount}/{r.ingredients.length} в запасах
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="px-2.5 py-1.5 rounded-xl bg-emerald-600 text-white text-[11px] font-bold shrink-0 hover:bg-emerald-500 transition-colors"
+                      >
+                        Выбрать
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Модальное окно просмотра рецепта из плана */}

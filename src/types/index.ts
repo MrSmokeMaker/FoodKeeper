@@ -65,6 +65,7 @@ export interface MealPlanItem {
   fat: number;
   carbs: number;
   completed: boolean;
+  isLocked?: boolean; // Блокировка от случайной перезаписи при генерации недели
   notes?: string;
 }
 
@@ -106,6 +107,9 @@ export interface UserProfile {
   proExpiresAt?: string;
   dailyScansUsed: number;
   lastScanDate: string; // YYYY-MM-DD
+  diet?: 'none' | 'vegetarian' | 'low_carb' | 'high_protein';
+  allergens?: string[];
+  notificationsEnabled?: boolean;
   telegramId?: number;
   telegramUsername?: string;
 }

@@ -22,6 +22,7 @@ import {
   getRandomAlternativeRecipe,
   type MealPriority,
 } from './services/mealPlanGenerator';
+import { checkAndNotifyExpiringProducts } from './services/notifications';
 import {
   applyDeductionsToDb,
   addMissingToShoppingList,
@@ -83,6 +84,13 @@ export function App() {
     const diffDays = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return diffDays <= 3;
   });
+
+  // Автоматическая проверка браузерных push-уведомлений при наличии истекающих продуктов
+  useEffect(() => {
+    if (profile?.notificationsEnabled && expiringProducts.length > 0) {
+      checkAndNotifyExpiringProducts(expiringProducts);
+    }
+  }, [profile?.notificationsEnabled, expiringProducts]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -177,18 +185,29 @@ export function App() {
     await db.mealPlan.bulkAdd(items);
   };
 
-  // Генерация 7-дневного плана из локального каталога рецептов с учётом приоритета
+  // Генерация 7-дневного плана из локального каталога рецептов с учётом приоритета и закреплений
   const handleGenerateWeeklyPlan = async (priority: MealPriority = 'any') => {
     let allRecipes = await db.recipes.toArray();
     if (allRecipes.length === 0) {
       await syncOnlineRecipeCatalog();
       allRecipes = await db.recipes.toArray();
     }
-    const newPlan = generateWeeklyMealPlanFromCatalog(allRecipes, todayStr, priority, products);
+    const newPlan = generateWeeklyMealPlanFromCatalog(
+      allRecipes,
+      todayStr,
+      priority,
+      products,
+      mealPlan,
+      {
+        diet: currentProfile.diet,
+        allergens: currentProfile.allergens,
+        expiringProducts,
+      }
+    );
     await handleUpdateMealPlan(newPlan);
   };
 
-  // Случайная замена блюда в дне на другое из каталога рецептов с учётом приоритета
+  // Случайная замена блюда в дне на другое из каталога рецептов с учётом приоритета и предпочтений
   const handleReplaceMeal = async (
     mealId: number,
     mealType: string,
@@ -207,7 +226,12 @@ export function App() {
       mealType,
       meal?.recipeId,
       priority,
-      products
+      products,
+      {
+        diet: currentProfile.diet,
+        allergens: currentProfile.allergens,
+        expiringProducts,
+      }
     );
     if (!alternative) return;
 
@@ -219,6 +243,25 @@ export function App() {
       protein: alternative.protein,
       fat: alternative.fat,
       carbs: alternative.carbs,
+      completed: false,
+    });
+  };
+
+  // Закрепление/открепление блюда от перезаписи
+  const handleToggleLockMeal = async (mealId: number, isLocked: boolean) => {
+    await db.mealPlan.update(mealId, { isLocked });
+  };
+
+  // Ручная установка выбранного рецепта в слот
+  const handleSetSlotRecipe = async (mealId: number, recipe: Recipe) => {
+    await db.mealPlan.update(mealId, {
+      title: recipe.title,
+      recipeId: recipe.id,
+      ingredients: recipe.ingredients,
+      calories: recipe.calories,
+      protein: recipe.protein,
+      fat: recipe.fat,
+      carbs: recipe.carbs,
       completed: false,
     });
   };
@@ -321,9 +364,12 @@ export function App() {
                 mealPlan={mealPlan}
                 pantryProducts={products}
                 recipes={recipes}
+                expiringProducts={expiringProducts}
                 profile={currentProfile}
                 onUpdateMealPlan={handleUpdateMealPlan}
                 onToggleMeal={handleToggleMeal}
+                onToggleLockMeal={handleToggleLockMeal}
+                onSetSlotRecipe={handleSetSlotRecipe}
                 onReplaceMeal={handleReplaceMeal}
                 onGenerateWeeklyPlan={handleGenerateWeeklyPlan}
                 onCookRecipe={handleCookRecipe}

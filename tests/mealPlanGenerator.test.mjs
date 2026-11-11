@@ -4,6 +4,8 @@ import {
   generateWeeklyMealPlanFromCatalog,
   getRandomAlternativeRecipe,
   getRandomRecipeFromList,
+  filterRecipesByPreferences,
+  scoreRecipeForExpiringProducts,
 } from '../src/services/mealPlanGenerator.ts';
 
 const mockRecipes = [
@@ -73,6 +75,107 @@ test('getRandomAlternativeRecipe prioritizes pantry products when priority is pa
   const alt = getRandomAlternativeRecipe(recipesWithIngs, 'breakfast', undefined, 'pantry', pantry);
   assert.ok(alt !== null);
   assert.equal(alt.id, 1, 'Should pick recipe with eggs present in pantry');
+});
+
+test('generateWeeklyMealPlanFromCatalog preserves locked meal items', () => {
+  const existingPlan = [
+    {
+      date: '2026-11-11',
+      mealType: 'breakfast',
+      title: 'Фирменный завтрак шефа',
+      recipeId: 999,
+      calories: 500,
+      protein: 30,
+      fat: 20,
+      carbs: 40,
+      completed: false,
+      isLocked: true,
+    },
+  ];
+
+  const plan = generateWeeklyMealPlanFromCatalog(
+    mockRecipes,
+    '2026-11-11',
+    'any',
+    [],
+    existingPlan
+  );
+
+  const preservedBreakfast = plan.find(
+    (m) => m.date === '2026-11-11' && m.mealType === 'breakfast'
+  );
+  assert.ok(preservedBreakfast);
+  assert.equal(preservedBreakfast.title, 'Фирменный завтрак шефа');
+  assert.equal(preservedBreakfast.isLocked, true);
+  assert.equal(plan.length, 28);
+});
+
+test('filterRecipesByPreferences filters out allergens and respects diet', () => {
+  const testRecipes = [
+    {
+      id: 1,
+      title: 'Салат с тунцом',
+      category: 'lunch',
+      calories: 300,
+      protein: 25,
+      fat: 10,
+      carbs: 5,
+      ingredients: [{ name: 'Тунец консервированный', amount: 100, unit: 'г' }],
+    },
+    {
+      id: 2,
+      title: 'Овсяная каша на воде',
+      category: 'breakfast',
+      calories: 250,
+      protein: 10,
+      fat: 5,
+      carbs: 45,
+      ingredients: [{ name: 'Овсяные хлопья', amount: 60, unit: 'г' }],
+    },
+    {
+      id: 3,
+      title: 'Стейк говяжий',
+      category: 'dinner',
+      calories: 450,
+      protein: 40,
+      fat: 20,
+      carbs: 0,
+      ingredients: [{ name: 'Говядина вырезка', amount: 200, unit: 'г' }],
+    },
+  ];
+
+  // Test allergen filtering: exclude fish
+  const withoutFish = filterRecipesByPreferences(testRecipes, 'none', ['тунец']);
+  assert.equal(withoutFish.length, 2);
+  assert.ok(!withoutFish.some((r) => r.title.includes('тунцом')));
+
+  // Test vegetarian diet
+  const vegOnly = filterRecipesByPreferences(testRecipes, 'vegetarian', []);
+  assert.equal(vegOnly.length, 1);
+  assert.equal(vegOnly[0].title, 'Овсяная каша на воде');
+});
+
+test('scoreRecipeForExpiringProducts awards points for matching expiring food', () => {
+  const recipe = {
+    id: 1,
+    title: 'Омлет с помидорами',
+    category: 'breakfast',
+    calories: 250,
+    protein: 15,
+    fat: 12,
+    carbs: 6,
+    ingredients: [
+      { name: 'Яйца', amount: 2, unit: 'шт' },
+      { name: 'Томаты свежие', amount: 100, unit: 'г' },
+    ],
+  };
+
+  const expiring = [
+    { id: 10, name: 'Томаты', category: 'vegetables', quantity: 200, unit: 'г' },
+  ];
+
+  const score = scoreRecipeForExpiringProducts(recipe, expiring);
+  assert.ok(score > 0, 'Score should be positive when expiring ingredient matches');
 });
 
 test('getRandomRecipeFromList handles empty and edge cases', () => {
