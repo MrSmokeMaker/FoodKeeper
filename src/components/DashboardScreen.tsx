@@ -9,7 +9,6 @@ import {
   Sparkles,
   CalendarDays,
   RefreshCw,
-  Zap,
   Shuffle,
   Undo2,
   Check,
@@ -58,7 +57,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onNavigateToFridge,
   onNavigateToRecipes,
   onNavigateToShopping: _onNavigateToShopping,
-  onOpenPaywall,
+  onOpenPaywall: _onOpenPaywall,
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
   const [replacingMealId, setReplacingMealId] = useState<number | null>(null);
@@ -71,8 +70,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     deductions: DeductionItem[];
     missingCount: number;
   } | null>(null);
-
-  const isPro = profile.subscriptionTier === 'pro';
 
   // Генерация 7 дней недели (начиная с сегодняшнего дня)
   const today = new Date();
@@ -176,11 +173,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   const handleGenerate = async () => {
-    if (!isPro) {
-      triggerHaptic('medium');
-      onOpenPaywall();
-      return;
-    }
     setGenerating(true);
     triggerHaptic('light');
     try {
@@ -192,11 +184,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   const handleReplace = async (meal: MealPlanItem) => {
-    if (!isPro) {
-      triggerHaptic('medium');
-      onOpenPaywall();
-      return;
-    }
     if (!meal.id) return;
     setReplacingMealId(meal.id);
     triggerHaptic('light');
@@ -246,18 +233,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           >
             {generating ? (
               <>
-                <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>План...</span>
-              </>
-            ) : isPro ? (
-              <>
-                <Sparkles className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />
-                <span>ИИ 7 дней</span>
+                <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                <span>Подбор...</span>
               </>
             ) : (
               <>
-                <Zap className="w-3 h-3 fill-amber-400 text-amber-400" />
-                <span>PRO меню</span>
+                <Shuffle className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />
+                <span>Случайное меню на 7 дней</span>
               </>
             )}
           </button>
@@ -487,13 +469,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       </>
                     ) : (
                       <>
-                        <Shuffle className="w-3 h-3" />
-                        <span>Заменить</span>
-                        {!isPro && (
-                          <span className="text-[9px] px-1 py-0.2 bg-amber-500/10 text-amber-500 rounded-full font-bold">
-                            PRO
-                          </span>
-                        )}
+                        <Shuffle className="w-3 h-3 text-emerald-500" />
+                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">Заменить</span>
                       </>
                     )}
                   </button>

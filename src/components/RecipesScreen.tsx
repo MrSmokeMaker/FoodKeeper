@@ -3,7 +3,7 @@ import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, Aler
 import { triggerConfetti } from '../utils/confetti';
 import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
-import { parseRecipeFromWeb, searchOnlineRecipesViaAI } from '../services/gemini';
+import { parseRecipeFromWeb } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
 import { CookConfirmModal } from './CookConfirmModal';
 import type { DeductionItem, MissingIngredientItem } from '../services/inventory';
@@ -35,8 +35,6 @@ export const RecipesScreen = ({
   const [isCookModalOpen, setIsCookModalOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
-  const [searchCatalogQuery, setSearchCatalogQuery] = useState('');
-  const [searchingCatalog, setSearchingCatalog] = useState(false);
 
   const isPro = profile.subscriptionTier === 'pro';
 
@@ -91,41 +89,6 @@ export const RecipesScreen = ({
       alert('Ошибка синхронизации: ' + e.message);
     } finally {
       setSyncing(false);
-    }
-  };
-
-  // Поиск новых рецептов в интернет-каталоге через ИИ
-  const handleSearchOnlineCatalog = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchCatalogQuery.trim()) return;
-
-    if (!isPro) {
-      onOpenPaywall();
-      return;
-    }
-
-    setSearchingCatalog(true);
-    try {
-      const found = await searchOnlineRecipesViaAI(searchCatalogQuery.trim(), {
-        proxyUrl: profile.geminiProxyUrl,
-      });
-
-      for (const r of found) {
-        for (const ing of r.ingredients) {
-          if (ing.category) {
-            await ensureCategoryExists(ing.category);
-          }
-        }
-        await onAddRecipe(r);
-      }
-
-      triggerConfetti({ particleCount: 45, spread: 55 });
-      setSearchCatalogQuery('');
-      triggerHaptic('success');
-    } catch (err: any) {
-      alert('Ошибка поиска: ' + err.message);
-    } finally {
-      setSearchingCatalog(false);
     }
   };
 
@@ -245,25 +208,6 @@ export const RecipesScreen = ({
           </button>
         </div>
       </div>
-
-      {/* Быстрый поиск в интернет-библиотеке с помощью ИИ */}
-      <form onSubmit={handleSearchOnlineCatalog} className="flex gap-2">
-        <input
-          type="text"
-          value={searchCatalogQuery}
-          onChange={(e) => setSearchCatalogQuery(e.target.value)}
-          placeholder="Найти в открытой интернет-библиотеке (например: Лазанья, Паста)..."
-          className="flex-1 px-3.5 py-2 text-xs rounded-2xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        />
-        <button
-          type="submit"
-          disabled={searchingCatalog || !searchCatalogQuery.trim()}
-          className="px-3.5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 disabled:opacity-50 flex items-center gap-1 shadow-sm"
-        >
-          {searchingCatalog ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          <span>ИИ-поиск</span>
-        </button>
-      </form>
 
       {/* Переключатель табов: Каталог vs По наличию в холодильнике */}
       <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl">

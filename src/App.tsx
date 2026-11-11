@@ -16,7 +16,7 @@ const RecipesScreen = lazy(() => import('./components/RecipesScreen').then(m => 
 
 import { initTelegramApp, triggerHaptic } from './services/telegram';
 import { getInitialTheme, applyThemeToDocument } from './services/theme';
-import { generateWeeklyPlanWithAI } from './services/gemini';
+import { generateWeeklyMealPlanFromCatalog, getRandomAlternativeRecipe } from './services/mealPlanGenerator';
 import {
   applyDeductionsToDb,
   addMissingToShoppingList,
@@ -172,50 +172,37 @@ export function App() {
     await db.mealPlan.bulkAdd(items);
   };
 
-  // Генерация 7-дневного плана ИИ
+  // Генерация 7-дневного плана из локального каталога рецептов
   const handleGenerateWeeklyPlan = async () => {
-    const newPlan = await generateWeeklyPlanWithAI(
-      currentProfile,
-      products,
-      {
-        apiKey: currentProfile.geminiApiKey,
-        proxyUrl: currentProfile.geminiProxyUrl,
-      },
-      todayStr
-    );
+    let allRecipes = await db.recipes.toArray();
+    if (allRecipes.length === 0) {
+      await syncOnlineRecipeCatalog();
+      allRecipes = await db.recipes.toArray();
+    }
+    const newPlan = generateWeeklyMealPlanFromCatalog(allRecipes, todayStr);
     await handleUpdateMealPlan(newPlan);
   };
 
-  // Точечная замена одного блюда в плане (PRO-фича)
+  // Случайная замена блюда в дне на другое из каталога рецептов
   const handleReplaceMeal = async (mealId: number, mealType: string, _date: string) => {
-    const alternatives: Record<string, Array<{ title: string; c: number; p: number; f: number; cb: number }>> = {
-      breakfast: [
-        { title: 'Глазунья с томатами (100г) и цельнозерновым тостом (40г)', c: 370, p: 24, f: 18, cb: 22 },
-        { title: 'Протеиновые блинчики с греческим йогуртом (100г)', c: 390, p: 32, f: 10, cb: 35 },
-      ],
-      lunch: [
-        { title: 'Стейк из индейки (180г) с киноа (60г) и стручковой фасолью (120г)', c: 540, p: 46, f: 14, cb: 50 },
-        { title: 'Паста из твердых сортов (70г) с тунцом (150г) и томатами (80г)', c: 560, p: 42, f: 16, cb: 58 },
-      ],
-      snack: [
-        { title: 'Горсть миндаля (30г) и зеленое яблоко (150г)', c: 220, p: 7, f: 14, cb: 18 },
-        { title: 'Белковый коктейль с бананом (100г) и молоком (200мл)', c: 250, p: 28, f: 3, cb: 26 },
-      ],
-      dinner: [
-        { title: 'Филе белой рыбы на пару (200г) с брокколи (150г)', c: 330, p: 38, f: 8, cb: 14 },
-        { title: 'Салат с креветками (160г), авокадо (70г) и миксом зелени (60г)', c: 350, p: 30, f: 19, cb: 10 },
-      ],
-    };
+    const meal = await db.mealPlan.get(mealId);
+    let allRecipes = await db.recipes.toArray();
+    if (allRecipes.length === 0) {
+      await syncOnlineRecipeCatalog();
+      allRecipes = await db.recipes.toArray();
+    }
 
-    const pool = alternatives[mealType] || alternatives.dinner;
-    const randomChoice = pool[Math.floor(Math.random() * pool.length)];
+    const alternative = getRandomAlternativeRecipe(allRecipes, mealType, meal?.recipeId);
+    if (!alternative) return;
 
     await db.mealPlan.update(mealId, {
-      title: randomChoice.title,
-      calories: randomChoice.c,
-      protein: randomChoice.p,
-      fat: randomChoice.f,
-      carbs: randomChoice.cb,
+      title: alternative.title,
+      recipeId: alternative.id,
+      ingredients: alternative.ingredients,
+      calories: alternative.calories,
+      protein: alternative.protein,
+      fat: alternative.fat,
+      carbs: alternative.carbs,
       completed: false,
     });
   };

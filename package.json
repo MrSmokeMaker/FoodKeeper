@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "npx vite-node tests/inventory.test.mjs && npx vite-node tests/theme.test.mjs && npx vite-node tests/barcode.test.mjs && npx vite-node tests/catalogSync.test.mjs"
+    "test": "npx vite-node tests/inventory.test.mjs && npx vite-node tests/theme.test.mjs && npx vite-node tests/barcode.test.mjs && npx vite-node tests/catalogSync.test.mjs && npx vite-node tests/mealPlanGenerator.test.mjs"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4",
