@@ -43,7 +43,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[92vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-amber-500/30">
+      <div className="bg-background-light dark:bg-background-dark w-full max-w-md max-h-[92vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-amber-500/30">
         {/* Шапка с градиентом */}
         <div className="relative p-5 bg-gradient-to-br from-amber-500/20 via-emerald-500/10 to-transparent border-b border-zinc-200/80 dark:border-white/5">
           <button
@@ -71,7 +71,7 @@ export const PaywallModal: React.FC<PaywallModalProps> = ({
         {/* Список фич */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 dark:bg-zinc-800/60 rounded-2xl text-xs mb-3">
-            <div className="p-2 text-center rounded-xl bg-white dark:bg-zinc-900 shadow-sm">
+            <div className="p-2 text-center rounded-xl bg-background-light dark:bg-background-dark shadow-sm">
               <span className="text-[10px] text-zinc-400 block">Текущий тариф</span>
               <span className="font-bold text-zinc-700 dark:text-zinc-300 uppercase">
                 {currentTier === 'pro' ? 'PRO ✨' : 'FREE (7 сканов/день)'}

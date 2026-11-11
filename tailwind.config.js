@@ -20,14 +20,30 @@ export default {
           800: '#065f46',
           900: '#064e3b',
         },
+        background: {
+          light: '#ffffff',
+          dark: '#111827',
+        },
+        primary: {
+          light: '#10b981',
+          dark: '#34d399',
+        },
+        accent: {
+          light: '#fbbf24',
+          dark: '#d97706',
+        },
+        text: {
+          light: '#111827',
+          dark: '#f3f4f6',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-      }
+      },
     },
   },
   plugins: [],
-}
+};

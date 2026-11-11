@@ -12,7 +12,9 @@ import { FridgeScreen } from './components/FridgeScreen';
 import { ScannerScreen } from './components/ScannerScreen';
 import { RecipesScreen } from './components/RecipesScreen';
 import { ShoppingListScreen } from './components/ShoppingListScreen';
+
 import { initTelegramApp, triggerHaptic } from './services/telegram';
+import { getInitialTheme, applyThemeToDocument } from './services/theme';
 import { generateWeeklyPlanWithAI } from './services/gemini';
 import {
   applyDeductionsToDb,
@@ -26,7 +28,10 @@ export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const tg = initTelegramApp();
+    return getInitialTheme(tg.colorScheme) === 'dark';
+  });
 
   // Инициализация базы данных и Telegram WebApp при старте
   useEffect(() => {
@@ -43,18 +48,11 @@ export function App() {
         }
       });
     }
-    if (tg.colorScheme) {
-      setIsDark(tg.colorScheme === 'dark');
-    }
   }, []);
 
-  // Синхронизация тёмной темы с HTML классом
+  // Синхронизация тёмной темы с HTML классом и хранилищем
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    applyThemeToDocument(isDark ? 'dark' : 'light');
   }, [isDark]);
 
   // Реактивные запросы к локальной базе IndexedDB через Dexie
@@ -319,24 +317,28 @@ export function App() {
             )}
 
             {activeTab === 'scanner' && (
-              <ScannerScreen
-                profile={currentProfile}
-                onAddProduct={handleAddProduct}
-                onNavigateToFridge={() => setActiveTab('fridge')}
-                onOpenPaywall={() => setIsPaywallOpen(true)}
-                onIncrementScanCount={handleIncrementScanCount}
-              />
+              <Suspense fallback={<div>Loading Scanner...</div>}>
+                <ScannerScreen
+                  profile={currentProfile}
+                  onAddProduct={handleAddProduct}
+                  onNavigateToFridge={() => setActiveTab('fridge')}
+                  onOpenPaywall={() => setIsPaywallOpen(true)}
+                  onIncrementScanCount={handleIncrementScanCount}
+                />
+              </Suspense>
             )}
 
             {activeTab === 'recipes' && (
-              <RecipesScreen
-                recipes={recipes}
-                pantryProducts={products}
-                profile={currentProfile}
-                onAddRecipe={handleAddRecipe}
-                onCookRecipe={handleCookRecipe}
-                onOpenPaywall={() => setIsPaywallOpen(true)}
-              />
+              <Suspense fallback={<div>Loading Recipes...</div>}>
+                <RecipesScreen
+                  recipes={recipes}
+                  pantryProducts={products}
+                  profile={currentProfile}
+                  onAddRecipe={handleAddRecipe}
+                  onCookRecipe={handleCookRecipe}
+                  onOpenPaywall={() => setIsPaywallOpen(true)}
+                />
+              </Suspense>
             )}
 
             {activeTab === 'shopping' && (

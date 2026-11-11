@@ -49,7 +49,7 @@ export const CookConfirmModal: React.FC<CookConfirmModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-fade-in">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-white/10 flex flex-col max-h-[90vh]">
+      <div className="bg-background-light dark:bg-zinc-900 w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 dark:border-white/10 flex flex-col max-h-[90vh]">
         {/* Шапка */}
         <div className="p-4 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between">
           <div className="flex items-center space-x-2.5">

@@ -145,7 +145,7 @@ export const FridgeScreen = ({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по продуктам в холодильнике..."
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            className="w-full pl-9 pr-4 py-2 text-xs rounded-2xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
         </div>
 
@@ -271,7 +271,7 @@ export const FridgeScreen = ({
       {/* Модальное окно добавления продукта вручную */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-background-light dark:bg-background-dark w-full max-w-sm rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                 Новый продукт

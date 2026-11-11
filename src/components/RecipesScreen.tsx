@@ -220,7 +220,7 @@ export const RecipesScreen = ({
           value={searchCatalogQuery}
           onChange={(e) => setSearchCatalogQuery(e.target.value)}
           placeholder="Поиск рецепта в интернет-библиотеке (например: Сырники, Боул, Лазанья)..."
-          className="flex-1 px-3.5 py-2 text-xs rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          className="flex-1 px-3.5 py-2 text-xs rounded-2xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <button
           type="submit"
@@ -241,7 +241,7 @@ export const RecipesScreen = ({
           }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
             activeTab === 'pantry'
-              ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+              ? 'bg-background-light dark:bg-background-dark text-emerald-600 dark:text-emerald-400 shadow-sm'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
@@ -254,7 +254,7 @@ export const RecipesScreen = ({
           }}
           className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
             activeTab === 'catalog'
-              ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+              ? 'bg-background-light dark:bg-background-dark text-emerald-600 dark:text-emerald-400 shadow-sm'
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
@@ -350,7 +350,7 @@ export const RecipesScreen = ({
       {/* Модальное окно просмотра рецепта с обязательными граммовками */}
       {selectedRecipe && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
+          <div className="bg-background-light dark:bg-background-dark w-full max-w-md max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
             <div className="p-4 border-b border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Scale className="w-3.5 h-3.5" /> Рецепт с граммовками
@@ -500,7 +500,7 @@ export const RecipesScreen = ({
       {/* Модальное окно импорта из интернета */}
       {isImportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4">
+          <div className="bg-background-light dark:bg-background-dark w-full max-w-md rounded-3xl p-5 shadow-2xl border border-zinc-200 dark:border-white/10 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-emerald-500" /> Импорт рецепта с граммовками

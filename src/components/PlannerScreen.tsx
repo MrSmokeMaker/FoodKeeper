@@ -346,7 +346,7 @@ export const PlannerScreen = ({
       {/* Модальное окно списка покупок на неделю с экспортом в Telegram */}
       {isShoppingOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
+          <div className="bg-background-light dark:bg-background-dark w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
             <div className="p-4 border-b border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <ShoppingCart className="w-4 h-4 text-emerald-500" />

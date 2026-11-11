@@ -229,7 +229,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           </div>
           <button
             onClick={handleUndoDeduction}
-            className="px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 active:scale-95 transition-all"
+            className="px-2.5 py-1 rounded-xl bg-background-light/20 hover:bg-background-light/30 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 active:scale-95 transition-all"
           >
             <Undo2 className="w-3 h-3" /> Отменить
           </button>
@@ -534,7 +534,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <div
                 key={p.id}
                 onClick={onNavigateToRecipes}
-                className="bg-white/90 dark:bg-zinc-900/90 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/15 shadow-sm cursor-pointer hover:border-amber-500/40 transition-colors"
+                className="bg-background-light/90 dark:bg-background-dark/90 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/15 shadow-sm cursor-pointer hover:border-amber-500/40 transition-colors"
               >
                 <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate block">
                   {p.name}

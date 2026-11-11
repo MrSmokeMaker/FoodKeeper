@@ -128,10 +128,10 @@ export const ScannerScreen = ({
 
   // Расчет КБЖУ на всю упаковку
   const multiplier = unit === 'г' || unit === 'мл' ? quantity / 100 : quantity;
-  const totalPackageCalories = Math.round(calories * multiplier);
-  const totalPackageProtein = (protein * multiplier).toFixed(1);
-  const totalPackageFat = (fat * multiplier).toFixed(1);
-  const totalPackageCarbs = (carbs * multiplier).toFixed(1);
+  const totalPackageCalories = useMemo(() => Math.round(calories * multiplier), [calories, multiplier]);
+  const totalPackageProtein = useMemo(() => (protein * multiplier).toFixed(1), [protein, multiplier]);
+  const totalPackageFat = useMemo(() => (fat * multiplier).toFixed(1), [fat, multiplier]);
+  const totalPackageCarbs = useMemo(() => (carbs * multiplier).toFixed(1), [carbs, multiplier]);
 
   const handleSaveToFridge = async () => {
     if (!name.trim()) return;
@@ -214,7 +214,7 @@ export const ScannerScreen = ({
               <div className="absolute inset-0 bg-black/60 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center text-white space-y-2">
                 <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
                 <span className="text-xs font-semibold">ИИ читает вес, КБЖУ и срок годности...</span>
-                <div className="w-32 h-1 bg-white/20 rounded-full overflow-hidden">
+                <div className="w-32 h-1 bg-background-light/20 rounded-full overflow-hidden">
                   <div className="w-full h-full bg-emerald-400 animate-pulse" />
                 </div>
               </div>
@@ -337,7 +337,7 @@ export const ScannerScreen = ({
                   type="number"
                   value={quantity}
                   onChange={(e) => setQuantity(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
+                  className="w-full px-2.5 py-1.5 rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 font-bold"
                 />
               </div>
               <div>
@@ -347,7 +347,7 @@ export const ScannerScreen = ({
                 <select
                   value={unit}
                   onChange={(e) => setUnit(e.target.value as any)}
-                  className="w-full px-2 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
+                  className="w-full px-2 py-1.5 rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 font-bold"
                 >
                   <option value="г">г (граммы)</option>
                   <option value="кг">кг</option>
@@ -423,7 +423,7 @@ export const ScannerScreen = ({
                 required
                 value={expiryDate}
                 onChange={(e) => setExpiryDate(e.target.value)}
-                className="w-full px-3 py-1.5 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 font-bold"
+                className="w-full px-3 py-1.5 rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 font-bold"
               />
             </div>
           </div>

@@ -86,7 +86,7 @@ export const SettingsModal = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-zinc-900 w-full max-w-md max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
+      <div className="bg-background-light dark:bg-background-dark w-full max-w-md max-h-[90vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
         {/* Заголовок */}
         <div className="p-4 border-b border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
           <div className="flex items-center space-x-2">
@@ -164,7 +164,7 @@ export const SettingsModal = ({
             </div>
 
             {calcOpen && (
-              <div className="p-3 bg-white dark:bg-zinc-900 rounded-xl space-y-2.5 text-xs border border-emerald-500/30">
+              <div className="p-3 bg-background-light dark:bg-background-dark rounded-xl space-y-2.5 text-xs border border-emerald-500/30">
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[10px] text-zinc-400">Пол</label>
@@ -243,7 +243,7 @@ export const SettingsModal = ({
                   step="0.1"
                   value={currentWeight}
                   onChange={(e) => setCurrentWeight(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10"
                 />
               </div>
               <div>
@@ -253,7 +253,7 @@ export const SettingsModal = ({
                   step="0.1"
                   value={targetWeight}
                   onChange={(e) => setTargetWeight(Number(e.target.value))}
-                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10"
                 />
               </div>
             </div>
@@ -265,7 +265,7 @@ export const SettingsModal = ({
                   type="number"
                   value={targetCalories}
                   onChange={(e) => setTargetCalories(Number(e.target.value))}
-                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-emerald-500"
+                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-emerald-500"
                 />
               </div>
               <div>
@@ -274,7 +274,7 @@ export const SettingsModal = ({
                   type="number"
                   value={targetProtein}
                   onChange={(e) => setTargetProtein(Number(e.target.value))}
-                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-blue-500"
+                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-blue-500"
                 />
               </div>
               <div>
@@ -283,7 +283,7 @@ export const SettingsModal = ({
                   type="number"
                   value={targetFat}
                   onChange={(e) => setTargetFat(Number(e.target.value))}
-                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-amber-500"
+                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-amber-500"
                 />
               </div>
               <div>
@@ -292,7 +292,7 @@ export const SettingsModal = ({
                   type="number"
                   value={targetCarbs}
                   onChange={(e) => setTargetCarbs(Number(e.target.value))}
-                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 text-purple-500"
+                  className="w-full px-1.5 py-1 text-center text-xs font-bold rounded-lg bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-purple-500"
                 />
               </div>
             </div>
@@ -320,7 +320,7 @@ export const SettingsModal = ({
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="AQ.Ab8... или AIzaSy..."
-                    className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 font-mono text-zinc-900 dark:text-zinc-100"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 font-mono text-zinc-900 dark:text-zinc-100"
                   />
                   <span className="text-[10px] text-zinc-400 mt-0.5 block">
                     Хранится локально на вашем устройстве в защищённом хранилище.
@@ -335,7 +335,7 @@ export const SettingsModal = ({
                   value={proxyUrl}
                   onChange={(e) => setProxyUrl(e.target.value)}
                   placeholder="https://pqeicvohoegcczvdxtiz.supabase.co/functions/v1/gemini-proxy"
-                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-white/10 font-mono"
+                  className="w-full px-2.5 py-1.5 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 font-mono"
                 />
               </div>
             )}

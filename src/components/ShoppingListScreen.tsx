@@ -293,7 +293,7 @@ export const ShoppingListScreen: React.FC<ShoppingListScreenProps> = ({
             onClick={() => setFilter('all')}
             className={`px-3 py-1 rounded-xl transition-all ${
               filter === 'all'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
+                ? 'bg-background-light dark:bg-background-dark text-zinc-900 dark:text-white shadow-xs font-bold'
                 : 'hover:text-zinc-700'
             }`}
           >
@@ -303,7 +303,7 @@ export const ShoppingListScreen: React.FC<ShoppingListScreenProps> = ({
             onClick={() => setFilter('pending')}
             className={`px-3 py-1 rounded-xl transition-all ${
               filter === 'pending'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
+                ? 'bg-background-light dark:bg-background-dark text-zinc-900 dark:text-white shadow-xs font-bold'
                 : 'hover:text-zinc-700'
             }`}
           >
@@ -313,7 +313,7 @@ export const ShoppingListScreen: React.FC<ShoppingListScreenProps> = ({
             onClick={() => setFilter('checked')}
             className={`px-3 py-1 rounded-xl transition-all ${
               filter === 'checked'
-                ? 'bg-white dark:bg-zinc-700 text-zinc-900 dark:text-white shadow-xs font-bold'
+                ? 'bg-background-light dark:bg-background-dark text-zinc-900 dark:text-white shadow-xs font-bold'
                 : 'hover:text-zinc-700'
             }`}
           >

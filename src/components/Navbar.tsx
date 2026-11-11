@@ -36,7 +36,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/85 dark:bg-zinc-950/85 backdrop-blur-xl border-t border-zinc-200/70 dark:border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)] safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-background-light/85 dark:bg-background-dark/85 backdrop-blur-xl border-t border-zinc-200/70 dark:border-white/10 shadow-[0_-4px_24px_rgba(0,0,0,0.05)] dark:shadow-[0_-4px_24px_rgba(0,0,0,0.4)] safe-bottom">
       <div className="max-w-md mx-auto px-3 py-1.5 flex items-center justify-between relative">
         {tabs.map((tab) => {
           const Icon = tab.icon;

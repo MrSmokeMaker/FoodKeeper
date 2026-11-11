@@ -111,14 +111,14 @@ export const WeightChart: React.FC<WeightChartProps> = ({
             value={newWeight}
             onChange={(e) => setNewWeight(e.target.value)}
             placeholder="78.5"
-            className="w-20 px-2.5 py-1 text-xs font-bold rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10"
+            className="w-20 px-2.5 py-1 text-xs font-bold rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10"
           />
           <input
             type="text"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Заметка (после тренировки...)"
-            className="flex-1 px-2.5 py-1 text-xs rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10"
+            className="flex-1 px-2.5 py-1 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10"
           />
           <button
             onClick={handleSave}

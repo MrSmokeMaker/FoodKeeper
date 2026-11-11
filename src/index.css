@@ -1,4 +1,16 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background-light: #ffffff;
+  --color-background-dark: #111827;
+  --color-text-light: #111827;
+  --color-text-dark: #f3f4f6;
+  --color-primary-light: #10b981;
+  --color-primary-dark: #34d399;
+  --color-accent-light: #fbbf24;
+  --color-accent-dark: #d97706;
+}
 
 :root {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
