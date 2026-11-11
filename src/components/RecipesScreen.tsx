@@ -193,6 +193,14 @@ export const RecipesScreen = ({
     return 0;
   });
 
+  const [displayLimit, setDisplayLimit] = useState(30);
+
+  useEffect(() => {
+    setDisplayLimit(30);
+  }, [selectedMealCategory, recipeFilterQuery, activeTab]);
+
+  const displayedRecipes = sortedRecipes.slice(0, displayLimit);
+
   const mealCategoryLabels: Record<string, string> = {
     breakfast: 'Завтрак',
     lunch: 'Обед',
@@ -347,7 +355,8 @@ export const RecipesScreen = ({
             </button>
           </div>
         ) : (
-          sortedRecipes.map((recipe) => {
+          <>
+            {displayedRecipes.map((recipe) => {
             const match = getPantryMatch(recipe);
 
             return (
@@ -432,7 +441,20 @@ export const RecipesScreen = ({
                 </div>
               </div>
             );
-          })
+          })}
+
+          {sortedRecipes.length > displayLimit && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                setDisplayLimit((prev) => prev + 30);
+              }}
+              className="w-full py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors shadow-xs"
+            >
+              Показать еще (осталось {sortedRecipes.length - displayLimit})
+            </button>
+          )}
+        </>
         )}
       </div>
 

@@ -323,7 +323,7 @@ export async function seedInitialDataIfNeeded() {
   }
 
   // 4. Гарантированное наполнение базы рецептов (даже если профиль уже был создан!)
-  await ensureFullRecipeLibrarySeeded();
+  await syncOnlineRecipeCatalog();
 }
 
 /**
@@ -812,8 +812,47 @@ export async function ensureFullRecipeLibrarySeeded(): Promise<number> {
 }
 
 /**
- * Синхронизация с интернет-библиотекой рецептов (гарантирует загрузку всех рецептов)
+ * Синхронизация с библиотекой рецептов:
+ * Загружает расширенную базу из 1000 рецептов из data/recipes.json,
+ * а при ошибке сети переключается на встроенные проверенные рецепты.
  */
 export async function syncOnlineRecipeCatalog(): Promise<number> {
+  if (typeof window !== 'undefined' && typeof fetch === 'function') {
+    try {
+      const res = await fetch('./data/recipes.json');
+      if (res.ok) {
+        const items: Recipe[] = await res.json();
+        const allInDb = await db.recipes.toArray();
+        const existingTitles = new Set(allInDb.map((r) => r.title.trim().toLowerCase()));
+        const toAdd = items.filter((r) => !existingTitles.has(r.title.trim().toLowerCase()));
+
+        if (toAdd.length > 0) {
+          // Гарантируем регистрацию категорий ингредиентов
+          const catSet = new Set<string>();
+          for (const r of toAdd) {
+            for (const ing of r.ingredients) {
+              if (ing.category) catSet.add(ing.category);
+            }
+          }
+          for (const cat of catSet) {
+            await ensureCategoryExists(cat);
+          }
+
+          // Убираем фиксированные id чтобы Dexie назначал автоинкремент
+          const sanitized = toAdd.map(({ id: _id, ...rest }) => ({
+            ...rest,
+            createdAt: rest.createdAt || new Date().toISOString().split('T')[0],
+          }));
+
+          await db.recipes.bulkAdd(sanitized as any);
+          return sanitized.length;
+        }
+        return 0;
+      }
+    } catch (err) {
+      console.warn('Не удалось загрузить ./data/recipes.json, используем встроенную библиотеку:', err);
+    }
+  }
+
   return await ensureFullRecipeLibrarySeeded();
 }
