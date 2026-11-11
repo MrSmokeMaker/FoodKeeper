@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Settings2, Zap } from 'lucide-react';
+import { Moon, Sun, Settings2, Zap, ShoppingCart } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 import { Logo } from './Logo';
@@ -9,6 +9,8 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onOpenPaywall: () => void;
   onToggleTheme: () => void;
+  onOpenShopping?: () => void;
+  shoppingPendingCount?: number;
   isDark: boolean;
 }
 
@@ -17,6 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenPaywall,
   onToggleTheme,
+  onOpenShopping,
+  shoppingPendingCount = 0,
   isDark,
 }) => {
   const isPro = profile?.subscriptionTier === 'pro';
@@ -63,6 +67,25 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {isDark ? <Sun className="w-4 h-4 text-amber-300" /> : <Moon className="w-4 h-4 text-zinc-600" />}
           </button>
+
+          {/* Кнопка списка покупок с бэйджем */}
+          {onOpenShopping && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenShopping();
+              }}
+              className="relative w-8 h-8 rounded-full flex items-center justify-center text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/80 active:scale-90 transition-all"
+              aria-label="Список покупок"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              {shoppingPendingCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {shoppingPendingCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Кнопка настроек */}
           <button

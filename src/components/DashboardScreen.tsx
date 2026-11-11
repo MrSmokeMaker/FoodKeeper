@@ -40,6 +40,7 @@ interface DashboardScreenProps {
   onNavigateToFridge: () => void;
   onNavigateToRecipes: () => void;
   onNavigateToShopping: () => void;
+  onNavigateToPlanner?: () => void;
   onOpenPaywall: () => void;
 }
 
@@ -57,6 +58,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onNavigateToFridge,
   onNavigateToRecipes,
   onNavigateToShopping: _onNavigateToShopping,
+  onNavigateToPlanner,
   onOpenPaywall: _onOpenPaywall,
 }) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
@@ -226,23 +228,39 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </span>
           </div>
 
-          <button
-            onClick={handleGenerate}
-            disabled={generating}
-            className="px-2.5 py-1 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-[11px] font-semibold flex items-center gap-1 hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
-          >
-            {generating ? (
-              <>
-                <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-                <span>Подбор...</span>
-              </>
-            ) : (
-              <>
-                <Shuffle className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />
-                <span>Случайное меню на 7 дней</span>
-              </>
+          <div className="flex items-center space-x-1.5">
+            {onNavigateToPlanner && (
+              <button
+                onClick={() => {
+                  triggerHaptic('light');
+                  onNavigateToPlanner();
+                }}
+                className="px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-[11px] font-semibold flex items-center gap-1 active:scale-95 transition-all"
+                title="Открыть отдельную страницу рациона на 7 дней"
+              >
+                <span>Вся неделя</span>
+                <ArrowRight className="w-3 h-3" />
+              </button>
             )}
-          </button>
+
+            <button
+              onClick={handleGenerate}
+              disabled={generating}
+              className="px-2.5 py-1 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-[11px] font-semibold flex items-center gap-1 hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
+            >
+              {generating ? (
+                <>
+                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
+                  <span>Подбор...</span>
+                </>
+              ) : (
+                <>
+                  <Shuffle className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />
+                  <span>Случайное меню на 7 дней</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
@@ -487,17 +505,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* Оповещение: продукты на исходе срока годности */}
       {expiringProducts.length > 0 && (
-        <div className="p-3.5 rounded-3xl bg-amber-500/[0.08] dark:bg-amber-400/[0.06] border border-amber-500/20">
+        <div className="p-3.5 rounded-3xl bg-amber-500/[0.04] dark:bg-amber-400/[0.04] border border-amber-500/15">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center space-x-1.5">
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="w-4 h-4 text-amber-600/80 dark:text-amber-300/80 shrink-0" />
+              <span className="text-xs font-semibold text-amber-800 dark:text-amber-200/90">
                 Истекает срок ({expiringProducts.length})
               </span>
             </div>
             <button
               onClick={onNavigateToFridge}
-              className="text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-center hover:underline"
+              className="text-[11px] font-medium text-amber-800 dark:text-amber-200/90 flex items-center hover:underline"
             >
               В холодильник <ArrowRight className="w-3 h-3 ml-0.5" />
             </button>
@@ -508,7 +526,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               <div
                 key={p.id}
                 onClick={onNavigateToRecipes}
-                className="bg-white/80 dark:bg-zinc-900/80 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/20 shadow-xs cursor-pointer hover:border-amber-500/40 transition-colors"
+                className="bg-white/80 dark:bg-zinc-900/80 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/15 shadow-xs cursor-pointer hover:border-amber-500/30 transition-colors"
               >
                 <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate block">
                   {p.name}
@@ -516,7 +534,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <span className="text-[10px] text-zinc-400 block mt-0.5">
                   {p.quantity} {p.unit}
                 </span>
-                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 block mt-1">
+                <span className="inline-block text-[10px] font-medium text-amber-800 dark:text-amber-200/90 bg-amber-500/10 px-1.5 py-0.5 rounded-md mt-1">
                   До: {p.expiryDate}
                 </span>
               </div>

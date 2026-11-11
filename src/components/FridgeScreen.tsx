@@ -200,7 +200,7 @@ export const FridgeScreen = ({
                           isExpired
                             ? 'bg-rose-500 ring-4 ring-rose-500/20'
                             : isExpiring
-                            ? 'bg-amber-500 ring-4 ring-amber-500/20'
+                            ? 'bg-amber-600/70 ring-4 ring-amber-500/10'
                             : 'bg-emerald-500'
                         }`}
                       />
@@ -219,14 +219,20 @@ export const FridgeScreen = ({
                       {p.expiryDate && (
                         <>
                           <span>•</span>
-                          <span className={`flex items-center gap-0.5 font-medium ${
-                            isExpired ? 'text-rose-500' : isExpiring ? 'text-amber-500' : ''
-                          }`}>
-                            <Calendar className="w-2.5 h-2.5" />
+                          <span
+                            className={`inline-flex items-center gap-1 font-medium text-[10px] px-1.5 py-0.5 rounded-md ${
+                              isExpired
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                : isExpiring
+                                ? 'bg-amber-500/10 text-amber-800 dark:text-amber-200/90'
+                                : 'text-zinc-500 dark:text-zinc-400'
+                            }`}
+                          >
+                            <Calendar className="w-2.5 h-2.5 opacity-70" />
                             {isExpired
                               ? 'Истёк'
                               : isExpiring
-                              ? `${daysLeft} дн`
+                              ? `Годен: ${daysLeft} дн`
                               : new Date(p.expiryDate).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}
                           </span>
                         </>

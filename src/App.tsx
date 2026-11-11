@@ -8,6 +8,7 @@ import { Header } from './components/Header';
 import { SettingsModal } from './components/SettingsModal';
 import { PaywallModal } from './components/PaywallModal';
 import { DashboardScreen } from './components/DashboardScreen';
+import { PlannerScreen } from './components/PlannerScreen';
 import { FridgeScreen } from './components/FridgeScreen';
 import { ShoppingListScreen } from './components/ShoppingListScreen';
 const ScannerScreen = lazy(() => import('./components/ScannerScreen').then(m => ({ default: m.ScannerScreen })));
@@ -16,7 +17,11 @@ const RecipesScreen = lazy(() => import('./components/RecipesScreen').then(m => 
 
 import { initTelegramApp, triggerHaptic } from './services/telegram';
 import { getInitialTheme, applyThemeToDocument } from './services/theme';
-import { generateWeeklyMealPlanFromCatalog, getRandomAlternativeRecipe } from './services/mealPlanGenerator';
+import {
+  generateWeeklyMealPlanFromCatalog,
+  getRandomAlternativeRecipe,
+  type MealPriority,
+} from './services/mealPlanGenerator';
 import {
   applyDeductionsToDb,
   addMissingToShoppingList,
@@ -172,19 +177,24 @@ export function App() {
     await db.mealPlan.bulkAdd(items);
   };
 
-  // Генерация 7-дневного плана из локального каталога рецептов
-  const handleGenerateWeeklyPlan = async () => {
+  // Генерация 7-дневного плана из локального каталога рецептов с учётом приоритета
+  const handleGenerateWeeklyPlan = async (priority: MealPriority = 'any') => {
     let allRecipes = await db.recipes.toArray();
     if (allRecipes.length === 0) {
       await syncOnlineRecipeCatalog();
       allRecipes = await db.recipes.toArray();
     }
-    const newPlan = generateWeeklyMealPlanFromCatalog(allRecipes, todayStr);
+    const newPlan = generateWeeklyMealPlanFromCatalog(allRecipes, todayStr, priority, products);
     await handleUpdateMealPlan(newPlan);
   };
 
-  // Случайная замена блюда в дне на другое из каталога рецептов
-  const handleReplaceMeal = async (mealId: number, mealType: string, _date: string) => {
+  // Случайная замена блюда в дне на другое из каталога рецептов с учётом приоритета
+  const handleReplaceMeal = async (
+    mealId: number,
+    mealType: string,
+    _date: string,
+    priority: MealPriority = 'any'
+  ) => {
     const meal = await db.mealPlan.get(mealId);
     let allRecipes = await db.recipes.toArray();
     if (allRecipes.length === 0) {
@@ -192,7 +202,13 @@ export function App() {
       allRecipes = await db.recipes.toArray();
     }
 
-    const alternative = getRandomAlternativeRecipe(allRecipes, mealType, meal?.recipeId);
+    const alternative = getRandomAlternativeRecipe(
+      allRecipes,
+      mealType,
+      meal?.recipeId,
+      priority,
+      products
+    );
     if (!alternative) return;
 
     await db.mealPlan.update(mealId, {
@@ -262,6 +278,11 @@ export function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenPaywall={() => setIsPaywallOpen(true)}
         onToggleTheme={() => setIsDark(!isDark)}
+        onOpenShopping={() => {
+          triggerHaptic('light');
+          setActiveTab('shopping');
+        }}
+        shoppingPendingCount={pendingShoppingCount}
         isDark={isDark}
       />
 
@@ -290,7 +311,23 @@ export function App() {
                 onNavigateToFridge={() => setActiveTab('fridge')}
                 onNavigateToRecipes={() => setActiveTab('recipes')}
                 onNavigateToShopping={() => setActiveTab('shopping')}
+                onNavigateToPlanner={() => setActiveTab('planner')}
                 onOpenPaywall={() => setIsPaywallOpen(true)}
+              />
+            )}
+
+            {activeTab === 'planner' && (
+              <PlannerScreen
+                mealPlan={mealPlan}
+                pantryProducts={products}
+                recipes={recipes}
+                profile={currentProfile}
+                onUpdateMealPlan={handleUpdateMealPlan}
+                onToggleMeal={handleToggleMeal}
+                onReplaceMeal={handleReplaceMeal}
+                onGenerateWeeklyPlan={handleGenerateWeeklyPlan}
+                onCookRecipe={handleCookRecipe}
+                onNavigateToShopping={() => setActiveTab('shopping')}
               />
             )}
 

@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale, Search } from 'lucide-react';
+import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale, Search, ShoppingCart } from 'lucide-react';
 import { triggerConfetti } from '../utils/confetti';
-import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
+import { syncOnlineRecipeCatalog, ensureCategoryExists, db } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
 import { parseRecipeFromWeb } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
 import { CookConfirmModal } from './CookConfirmModal';
-import type { DeductionItem, MissingIngredientItem } from '../services/inventory';
+import { calculateDeductions, type DeductionItem, type MissingIngredientItem } from '../services/inventory';
 
 interface RecipesScreenProps {
   recipes: Recipe[];
@@ -33,6 +33,46 @@ export const RecipesScreen = ({
   const [importInput, setImportInput] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [isCookModalOpen, setIsCookModalOpen] = useState(false);
+  const [recipeToast, setRecipeToast] = useState<string | null>(null);
+
+  const showRecipeToast = (msg: string) => {
+    setRecipeToast(msg);
+    setTimeout(() => setRecipeToast(null), 2500);
+  };
+
+  const handleAddToShopping = async () => {
+    if (!selectedRecipe) return;
+    const calc = calculateDeductions(selectedRecipe.ingredients || [], pantryProducts);
+    const missing = calc.missing;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    const itemsToAdd =
+      missing.length > 0
+        ? missing
+        : selectedRecipe.ingredients.map((i) => ({
+            name: i.name,
+            amount: i.amount,
+            unit: i.unit,
+          }));
+
+    for (const item of itemsToAdd) {
+      await db.shoppingList.add({
+        name: item.name,
+        amount: item.amount,
+        unit: item.unit,
+        checked: false,
+        source: 'cooking',
+        addedAt: todayStr,
+      });
+    }
+
+    triggerHaptic('success');
+    showRecipeToast(
+      missing.length > 0
+        ? `Добавлено в покупки: ${missing.length} поз.`
+        : `Ингредиенты добавлены в покупки (${itemsToAdd.length} поз.)`
+    );
+  };
   const [importError, setImportError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
 
@@ -173,6 +213,14 @@ export const RecipesScreen = ({
 
   return (
     <div className="space-y-4 pb-28">
+      {/* Мини-уведомление */}
+      {recipeToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 text-xs font-semibold shadow-xl backdrop-blur-md animate-fade-in flex items-center gap-2">
+          <Check className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+          <span>{recipeToast}</span>
+        </div>
+      )}
+
       {/* Шапка */}
       <div className="flex items-center justify-between">
         <div>
@@ -201,7 +249,7 @@ export const RecipesScreen = ({
             <Globe className="w-3.5 h-3.5" />
             <span>Импорт</span>
             {!isPro && (
-              <span className="text-[9px] px-1 bg-amber-500/20 text-amber-300 rounded font-black">
+              <span className="text-[9px] px-1 bg-amber-500/10 text-amber-800 dark:text-amber-200/90 rounded font-bold">
                 PRO
               </span>
             )}
@@ -364,7 +412,7 @@ export const RecipesScreen = ({
                         match.percent === 100
                           ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                           : match.percent >= 50
-                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          ? 'bg-amber-500/10 text-amber-800 dark:text-amber-200/90'
                           : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
                       }`}
                     >
@@ -454,7 +502,7 @@ export const RecipesScreen = ({
                 </div>
                 <div>
                   <span className="text-[10px] text-zinc-400 block">Жиры</span>
-                  <span className="text-xs font-black text-amber-500">
+                  <span className="text-xs font-black text-amber-700 dark:text-amber-300/90">
                     {selectedRecipe.fat} г
                   </span>
                 </div>
@@ -485,7 +533,7 @@ export const RecipesScreen = ({
                           {inStock ? (
                             <Check className="w-3.5 h-3.5 text-emerald-500" />
                           ) : (
-                            <span className="w-2 h-2 rounded-full bg-amber-500" />
+                            <span className="w-2 h-2 rounded-full bg-amber-600/70" />
                           )}
                           {ing.name}
                         </span>
@@ -523,18 +571,27 @@ export const RecipesScreen = ({
               </div>
             </div>
 
-            <div className="p-4 border-t border-zinc-200/80 dark:border-white/5 flex gap-2">
+            <div className="p-3.5 border-t border-zinc-200/80 dark:border-white/5 flex gap-2">
               <button
                 onClick={() => setSelectedRecipe(null)}
-                className="flex-1 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-xs font-bold text-zinc-700 dark:text-zinc-300"
+                className="px-3.5 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
               >
                 Закрыть
               </button>
               <button
                 onClick={handleCookStart}
-                className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5"
+                className="px-3 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:text-emerald-500 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                title="Списать продукты из холодильника"
               >
-                <Utensils className="w-4 h-4" /> Я приготовил! (Списать)
+                <Utensils className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Списать</span>
+              </button>
+              <button
+                onClick={handleAddToShopping}
+                className="flex-1 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-1.5 active:scale-95 transition-all"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                <span>В покупки</span>
               </button>
             </div>
           </div>

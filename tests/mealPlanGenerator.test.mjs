@@ -42,6 +42,39 @@ test('getRandomAlternativeRecipe picks different recipe of matching category', (
   assert.equal(alt.id, 2, 'Should pick the other breakfast (id 2) instead of excluded id 1');
 });
 
+test('getRandomAlternativeRecipe prioritizes pantry products when priority is pantry', () => {
+  const recipesWithIngs = [
+    {
+      id: 1,
+      title: 'Омлет с сыром',
+      category: 'breakfast',
+      calories: 300,
+      protein: 20,
+      fat: 15,
+      carbs: 5,
+      ingredients: [{ name: 'Яйца куриные', amount: 3, unit: 'шт' }],
+    },
+    {
+      id: 2,
+      title: 'Сырники из рикотты',
+      category: 'breakfast',
+      calories: 350,
+      protein: 25,
+      fat: 10,
+      carbs: 20,
+      ingredients: [{ name: 'Рикотта', amount: 200, unit: 'г' }],
+    },
+  ];
+
+  const pantry = [
+    { id: 101, name: 'Яйца куриные С0', category: 'eggs', quantity: 10, unit: 'шт' },
+  ];
+
+  const alt = getRandomAlternativeRecipe(recipesWithIngs, 'breakfast', undefined, 'pantry', pantry);
+  assert.ok(alt !== null);
+  assert.equal(alt.id, 1, 'Should pick recipe with eggs present in pantry');
+});
+
 test('getRandomRecipeFromList handles empty and edge cases', () => {
   assert.equal(getRandomRecipeFromList([]), null);
   const single = [{ id: 10, title: 'Один рецепт', category: 'lunch' }];

@@ -1,8 +1,8 @@
 import React from 'react';
-import { Home, Refrigerator, ScanLine, ChefHat, ShoppingCart } from 'lucide-react';
+import { Home, Refrigerator, ScanLine, ChefHat, CalendarDays } from 'lucide-react';
 import { motion } from 'framer-motion';
 
-export type TabType = 'dashboard' | 'fridge' | 'scanner' | 'recipes' | 'shopping';
+export type TabType = 'dashboard' | 'planner' | 'fridge' | 'scanner' | 'recipes' | 'shopping';
 
 interface NavbarProps {
   activeTab: TabType;
@@ -15,24 +15,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   pantryExpiringCount = 0,
-  shoppingPendingCount = 0,
+  shoppingPendingCount: _shoppingPendingCount = 0,
 }) => {
   const tabs = [
     { id: 'dashboard' as TabType, label: 'Главная', icon: Home },
+    { id: 'planner' as TabType, label: 'Рацион', icon: CalendarDays },
+    { id: 'scanner' as TabType, label: 'Скан', icon: ScanLine, highlight: true },
     {
       id: 'fridge' as TabType,
       label: 'Продукты',
       icon: Refrigerator,
       badge: pantryExpiringCount > 0 ? pantryExpiringCount : undefined,
     },
-    { id: 'scanner' as TabType, label: 'Скан', icon: ScanLine, highlight: true },
     { id: 'recipes' as TabType, label: 'Рецепты', icon: ChefHat },
-    {
-      id: 'shopping' as TabType,
-      label: 'Покупки',
-      icon: ShoppingCart,
-      badge: shoppingPendingCount > 0 ? shoppingPendingCount : undefined,
-    },
   ];
 
   return (

@@ -1,37 +1,67 @@
 import { useState } from 'react';
-import { CalendarDays, Sparkles, CheckCircle2, Circle, ShoppingCart, RefreshCw, X, Check, Zap, Send, Shuffle } from 'lucide-react';
+import {
+  CalendarDays,
+  Sparkles,
+  CheckCircle2,
+  Circle,
+  ShoppingCart,
+  RotateCw,
+  Shuffle,
+  Send,
+  Utensils,
+  BookOpen,
+  Refrigerator,
+  Flame,
+  Check,
+  X,
+  Plus,
+} from 'lucide-react';
 import confetti from 'canvas-confetti';
-import type { MealPlanItem, Product, UserProfile } from '../types';
-import { generateWeeklyPlanWithAI } from '../services/gemini';
+import type { MealPlanItem, Product, Recipe, UserProfile } from '../types';
+import type { MealPriority } from '../services/mealPlanGenerator';
 import { triggerHaptic, shareTextToTelegram } from '../services/telegram';
+import { CookConfirmModal } from './CookConfirmModal';
+import { calculateDeductions, type DeductionItem, type MissingIngredientItem } from '../services/inventory';
+import { db } from '../db';
 
 interface PlannerScreenProps {
   mealPlan: MealPlanItem[];
   pantryProducts: Product[];
+  recipes: Recipe[];
   profile: UserProfile;
   onUpdateMealPlan: (items: MealPlanItem[]) => Promise<void>;
   onToggleMeal: (id: number, completed: boolean) => Promise<void>;
-  onReplaceMeal: (id: number, mealType: string, date: string) => Promise<void>;
-  onOpenPaywall: () => void;
+  onReplaceMeal: (id: number, mealType: string, date: string, priority: MealPriority) => Promise<void>;
+  onGenerateWeeklyPlan: (priority: MealPriority) => Promise<void>;
+  onCookRecipe?: (recipe: Recipe, deductions?: DeductionItem[], missingToAdd?: MissingIngredientItem[]) => Promise<void>;
+  onNavigateToShopping: () => void;
 }
 
 export const PlannerScreen = ({
   mealPlan,
   pantryProducts,
+  recipes,
   profile,
-  onUpdateMealPlan,
   onToggleMeal,
   onReplaceMeal,
-  onOpenPaywall,
+  onGenerateWeeklyPlan,
+  onCookRecipe,
+  onNavigateToShopping,
 }: PlannerScreenProps) => {
   const [selectedDayOffset, setSelectedDayOffset] = useState(0);
+  const [priority, setPriority] = useState<MealPriority>('pantry');
   const [generating, setGenerating] = useState(false);
   const [replacingMealId, setReplacingMealId] = useState<number | null>(null);
-  const [isShoppingOpen, setIsShoppingOpen] = useState(false);
-  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+  const [viewingRecipe, setViewingRecipe] = useState<Recipe | null>(null);
+  const [cookingRecipe, setCookingRecipe] = useState<Recipe | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const isPro = profile.subscriptionTier === 'pro';
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
 
+  // 7 дней недели, начиная с сегодняшнего дня
   const today = new Date();
   const weekDays = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
@@ -60,155 +90,270 @@ export const PlannerScreen = ({
     { calories: 0, protein: 0, fat: 0, carbs: 0 }
   );
 
-  const mealLabels: Record<string, string> = {
-    breakfast: '1. Завтрак',
-    lunch: '2. Обед',
-    snack: '3. Полдник / Перекус',
-    dinner: '4. Ужин',
+  const mealLabels: Record<string, { label: string; icon: string }> = {
+    breakfast: { label: '1. Завтрак', icon: '☀️' },
+    lunch: { label: '2. Обед', icon: '🍲' },
+    snack: { label: '3. Полдник', icon: '🍏' },
+    dinner: { label: '4. Ужин', icon: '🌙' },
   };
 
-  const handleGenerateWeekly = async () => {
-    if (!isPro) {
-      triggerHaptic('medium');
-      onOpenPaywall();
-      return;
-    }
-
+  // Генерация всего рациона на 7 дней в 1 клик
+  const handleGenerate = async () => {
     setGenerating(true);
-    triggerHaptic('light');
-
+    triggerHaptic('medium');
     try {
-      const startDate = weekDays[0].dateStr;
-      const newPlan = await generateWeeklyPlanWithAI(
-        profile,
-        pantryProducts,
-        {
-          proxyUrl: profile.geminiProxyUrl,
-        },
-        startDate
-      );
-
-      await onUpdateMealPlan(newPlan);
-      confetti({ particleCount: 70, spread: 80, origin: { y: 0.5 } });
+      await onGenerateWeeklyPlan(priority);
+      confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
       triggerHaptic('success');
-    } catch (err: any) {
-      alert(`Ошибка генерации рациона: ${err.message}`);
+      showToast(
+        priority === 'pantry'
+          ? 'Рацион на 7 дней составлен из продуктов в наличии!'
+          : 'Случайный рацион на 7 дней успешно сгенерирован!'
+      );
+    } catch (e: any) {
+      alert('Ошибка при генерации меню: ' + e.message);
     } finally {
       setGenerating(false);
     }
   };
 
-  const handleSingleMealReplace = async (meal: MealPlanItem) => {
-    if (!isPro) {
-      triggerHaptic('medium');
-      onOpenPaywall();
-      return;
-    }
-
+  // Случайная замена одного блюда с учётом приоритета
+  const handleReplaceSingleMeal = async (meal: MealPlanItem) => {
     if (!meal.id) return;
     setReplacingMealId(meal.id);
     triggerHaptic('light');
-
     try {
-      await onReplaceMeal(meal.id, meal.mealType, meal.date);
+      await onReplaceMeal(meal.id, meal.mealType, meal.date, priority);
       triggerHaptic('success');
+      showToast('Блюдо заменено на новое!');
     } catch (e: any) {
-      alert('Ошибка замены блюда: ' + e.message);
+      alert('Ошибка при замене блюда: ' + e.message);
     } finally {
       setReplacingMealId(null);
     }
   };
 
-  const shoppingList = [
-    { name: 'Куриное филе охлажденное', amount: '800 г', inPantry: true },
-    { name: 'Творог 5%', amount: '400 г', inPantry: true },
-    { name: 'Яйца куриные С0', amount: '10 шт', inPantry: true },
-    { name: 'Сёмга или форель слабосолёная', amount: '200 г', inPantry: false },
-    { name: 'Свежий шпинат', amount: '150 г', inPantry: false },
-    { name: 'Овсяные хлопья длительной варки', amount: '1 уп', inPantry: true },
-    { name: 'Авокадо спелый', amount: '3 шт', inPantry: false },
-    { name: 'Греческий йогурт 2%', amount: '350 г', inPantry: false },
-    { name: 'Томаты Черри', amount: '300 г', inPantry: true },
-  ];
+  // Найти связанный рецепт в каталоге
+  const findRecipeForMeal = (meal: MealPlanItem): Recipe | null => {
+    if (meal.recipeId) {
+      const found = recipes.find((r) => r.id === meal.recipeId);
+      if (found) return found;
+    }
+    const byTitle = recipes.find((r) => r.title.toLowerCase() === meal.title.toLowerCase());
+    if (byTitle) return byTitle;
 
+    return {
+      title: meal.title,
+      description: 'Полноценное блюдо из рациона',
+      category: meal.mealType,
+      calories: meal.calories,
+      protein: meal.protein,
+      fat: meal.fat,
+      carbs: meal.carbs,
+      prepTimeMinutes: 20,
+      servings: 1,
+      ingredients: meal.ingredients || [],
+      instructions: [
+        'Подготовьте ингредиенты по списку.',
+        'Следуйте стандартной кулинарной обработке до готовности.',
+        'Подавайте горячим или украсьте зеленью по вкусу.',
+      ],
+      createdAt: new Date().toISOString().split('T')[0],
+    };
+  };
+
+  // Добавление недостающих ингредиентов конкретного блюда в список покупок
+  const handleAddMealToShopping = async (meal: MealPlanItem) => {
+    const rec = findRecipeForMeal(meal);
+    if (!rec) return;
+
+    const calc = calculateDeductions(rec.ingredients || [], pantryProducts);
+    const missing = calc.missing;
+
+    if (missing.length === 0) {
+      triggerHaptic('light');
+      showToast('Все ингредиенты уже есть в холодильнике!');
+      return;
+    }
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    for (const m of missing) {
+      await db.shoppingList.add({
+        name: m.name,
+        amount: m.amount,
+        unit: m.unit,
+        checked: false,
+        source: 'plan',
+        addedAt: todayStr,
+      });
+    }
+
+    triggerHaptic('success');
+    showToast(`Добавлено в покупки: ${missing.length} поз.`);
+  };
+
+  // Добавить все недостающие ингредиенты дня в список покупок
+  const handleAddDayMissingToShopping = async () => {
+    let addedCount = 0;
+    const todayStr = new Date().toISOString().split('T')[0];
+
+    for (const meal of sortedMeals) {
+      const rec = findRecipeForMeal(meal);
+      if (rec?.ingredients) {
+        const calc = calculateDeductions(rec.ingredients, pantryProducts);
+        for (const m of calc.missing) {
+          await db.shoppingList.add({
+            name: m.name,
+            amount: m.amount,
+            unit: m.unit,
+            checked: false,
+            source: 'plan',
+            addedAt: todayStr,
+          });
+          addedCount++;
+        }
+      }
+    }
+
+    if (addedCount > 0) {
+      triggerHaptic('success');
+      showToast(`Добавлено в покупки на день: ${addedCount} поз.`);
+    } else {
+      triggerHaptic('light');
+      showToast('Все ингредиенты на этот день есть в запасах!');
+    }
+  };
+
+  // Отправка меню в Telegram
   const handleShareTelegram = () => {
     triggerHaptic('success');
+    const dayName = weekDays[selectedDayOffset]?.dayName || '';
+    const dateFormatted = new Date(activeDateStr).toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'long',
+    });
+
     const lines = [
-      '🛒 Список покупок на неделю (FoodKeeper):',
-      ...shoppingList.map((item) => `- [ ] ${item.name} (${item.amount}) ${item.inPantry ? '✅ есть' : '🛒 купить'}`),
-      '\nСобрано в FoodKeeper PWA',
+      `📋 Меню на ${dayName.toUpperCase()}, ${dateFormatted} (FoodKeeper):`,
+      ...sortedMeals.map((m) => {
+        const icon = mealLabels[m.mealType]?.icon || '🍴';
+        return `${icon} ${m.title} — ${m.calories} ккал (Б:${m.protein} Ж:${m.fat} У:${m.carbs})`;
+      }),
+      `\nИтого за день: ${dayTotals.calories} ккал (цель: ${profile.targetCalories} ккал)`,
+      `Собрано в приложении FoodKeeper`,
     ];
     shareTextToTelegram(lines.join('\n'));
   };
 
   return (
-    <div className="space-y-4 pb-24">
-      {/* Шапка */}
+    <div className="space-y-4 pb-28">
+      {/* Всплывающее мини-уведомление */}
+      {toastMessage && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-2xl bg-zinc-900/90 dark:bg-zinc-100/90 text-white dark:text-zinc-900 text-xs font-semibold shadow-xl backdrop-blur-md animate-fade-in flex items-center gap-2">
+          <Check className="w-3.5 h-3.5 text-emerald-400 dark:text-emerald-600" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* Верхняя шапка экрана */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            <CalendarDays className="w-5 h-5 text-emerald-500" /> Меню на неделю
+          <h2 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
+            <CalendarDays className="w-5 h-5 text-emerald-500" /> Недельный рацион
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            4 приёма пищи в день под норму {profile.targetCalories} ккал
+            Сбалансированный план питания на 7 дней
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            setIsShoppingOpen(true);
-          }}
-          className="p-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
-          title="Список покупок"
-        >
-          <ShoppingCart className="w-5 h-5" />
-        </button>
+        <div className="flex items-center space-x-1.5">
+          <button
+            onClick={() => {
+              triggerHaptic('light');
+              onNavigateToShopping();
+            }}
+            className="p-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            title="Список покупок"
+          >
+            <ShoppingCart className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleShareTelegram}
+            className="p-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+            title="Поделиться в Telegram"
+          >
+            <Send className="w-4 h-4 text-sky-500" />
+          </button>
+        </div>
       </div>
 
-      {/* Кнопка генерации плана ИИ */}
-      <div className="glass-card rounded-3xl p-4 bg-gradient-to-r from-emerald-600/10 via-teal-500/10 to-transparent border border-emerald-500/20 flex items-center justify-between">
-        <div className="space-y-0.5">
-          <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4" /> ИИ-планировщик на 7 дней
-            {!isPro && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-500/15 text-amber-500 font-black">
-                PRO
-              </span>
-            )}
-          </span>
-          <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-            {isPro
-              ? 'Составит сбалансированное меню на 7 дней из запасов холодильника'
-              : 'Доступно в PRO-тарифе (499 ₽/мес)'}
+      {/* Блок генерации рациона на 7 дней в одну кнопку */}
+      <div className="premium-card rounded-3xl p-4 space-y-3.5 border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.04] via-transparent to-teal-500/[0.04]">
+        {/* Переключатель приоритета (Холодильник / Любое блюдо) */}
+        <div>
+          <label className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 block mb-1.5">
+            Приоритет подбора блюд:
+          </label>
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-white/5">
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setPriority('pantry');
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                priority === 'pantry'
+                  ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              <Refrigerator className="w-3.5 h-3.5" />
+              <span>Из холодильника</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                setPriority('any');
+              }}
+              className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                priority === 'any'
+                  ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+              }`}
+            >
+              <Shuffle className="w-3.5 h-3.5" />
+              <span>Любые блюда</span>
+            </button>
+          </div>
+          <p className="text-[10px] text-zinc-400 dark:text-zinc-500 mt-1 px-1">
+            {priority === 'pantry'
+              ? '🍏 Блюда подбираются с максимальным совпадением продуктов в ваших запасах.'
+              : '🎲 Случайный подбор среди всех 1000 блюд проверенной кулинарной базы.'}
           </p>
         </div>
 
+        {/* Главная кнопка генерации недели */}
         <button
-          onClick={handleGenerateWeekly}
+          onClick={handleGenerate}
           disabled={generating}
-          className="px-3.5 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/25 flex items-center gap-1.5 shrink-0 hover:opacity-95 disabled:opacity-50 active:scale-95 transition-all"
+          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-[0.98] transition-all"
         >
           {generating ? (
             <>
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              <span>Генерация...</span>
-            </>
-          ) : isPro ? (
-            <>
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Собрать план</span>
+              <RotateCw className="w-4 h-4 animate-spin" />
+              <span>Формируем рацион на 7 дней...</span>
             </>
           ) : (
             <>
-              <Zap className="w-3.5 h-3.5 fill-white" />
-              <span>Открыть PRO</span>
+              <Sparkles className="w-4 h-4" />
+              <span>Сгенерировать меню на неделю (28 блюд)</span>
             </>
           )}
         </button>
       </div>
 
-      {/* Селектор 7 дней */}
+      {/* Календарная лента 7 дней */}
       <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
         {weekDays.map((d) => {
           const isSelected = selectedDayOffset === d.offset;
@@ -221,208 +366,342 @@ export const PlannerScreen = ({
               }}
               className={`flex-1 min-w-[3rem] py-2.5 rounded-2xl flex flex-col items-center justify-center transition-all ${
                 isSelected
-                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                  : 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-bold'
+                  : 'bg-zinc-100/90 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
               }`}
             >
-              <span className="text-[10px] font-semibold uppercase">{d.dayName}</span>
+              <span className="text-[10px] uppercase">{d.dayName}</span>
               <span className="text-sm font-black mt-0.5">{d.dayNum}</span>
             </button>
           );
         })}
       </div>
 
-      {/* Сводка за выбранный день */}
-      <div className="glass-card rounded-2xl p-3 flex items-center justify-between text-xs">
-        <div>
-          <span className="text-[10px] text-zinc-400 block">Баланс за день</span>
-          <div className="font-extrabold text-zinc-900 dark:text-zinc-100 text-sm">
-            {dayTotals.calories}{' '}
-            <span className="text-[11px] font-normal text-zinc-400">
-              / {profile.targetCalories} ккал
+      {/* Сводка КБЖУ выбранного дня */}
+      <div className="premium-card rounded-2xl p-3 flex items-center justify-between text-xs">
+        <div className="flex items-center space-x-2">
+          <div className="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+            <Flame className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-zinc-900 dark:text-zinc-100">
+              {dayTotals.calories} ккал
+            </span>
+            <span className="text-zinc-400 text-[10px] block">
+              цель: {profile.targetCalories} ккал
             </span>
           </div>
         </div>
-        <div className="text-right text-[11px] font-semibold text-zinc-600 dark:text-zinc-300">
-          <span className="text-blue-500">Б {dayTotals.protein}г</span> ·{' '}
-          <span className="text-amber-500">Ж {dayTotals.fat}г</span> ·{' '}
+
+        <div className="flex items-center space-x-2 text-[11px] font-semibold">
+          <span className="text-blue-500">Б {dayTotals.protein}г</span>
+          <span className="text-zinc-300 dark:text-zinc-700">•</span>
+          <span className="text-amber-700 dark:text-amber-300/90">Ж {dayTotals.fat}г</span>
+          <span className="text-zinc-300 dark:text-zinc-700">•</span>
           <span className="text-purple-500">У {dayTotals.carbs}г</span>
         </div>
       </div>
 
-      {/* 4 приёма пищи */}
-      <div className="space-y-2.5">
+      {/* Список приёмов пищи дня */}
+      <div className="space-y-3">
         {sortedMeals.length === 0 ? (
-          <div className="glass-card rounded-3xl p-8 text-center space-y-2">
-            <CalendarDays className="w-10 h-10 text-zinc-400 mx-auto" />
-            <p className="text-xs font-bold text-zinc-700 dark:text-zinc-300">
-              На этот день пока нет плана
+          <div className="p-8 text-center rounded-3xl bg-zinc-50 dark:bg-zinc-900/50 border border-dashed border-zinc-200 dark:border-white/10 space-y-2">
+            <CalendarDays className="w-8 h-8 text-zinc-400 mx-auto" />
+            <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+              На этот день блюда ещё не сгенерированы
             </p>
             <p className="text-[11px] text-zinc-400">
-              {isPro ? 'Нажмите «Собрать план» для автоматического расчета ИИ' : 'Перейдите на PRO для авто-генерации меню'}
+              Нажмите кнопку выше, чтобы составить недельное меню в 1 клик
             </p>
           </div>
         ) : (
-          sortedMeals.map((meal) => (
-            <div
-              key={meal.id}
-              className={`glass-card rounded-3xl p-4 transition-all ${
-                meal.completed
-                  ? 'bg-emerald-500/5 border-emerald-500/30'
-                  : 'hover:border-zinc-300 dark:hover:border-white/20'
-              }`}
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-start space-x-3">
-                  <button
-                    onClick={() => {
-                      triggerHaptic('light');
-                      meal.id && onToggleMeal(meal.id, !meal.completed);
-                    }}
-                    className="mt-0.5 text-zinc-400 focus:outline-none"
-                  >
-                    {meal.completed ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500/20" />
-                    ) : (
-                      <Circle className="w-5 h-5" />
-                    )}
-                  </button>
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                      {mealLabels[meal.mealType] || meal.mealType}
-                    </span>
-                    <h4
-                      className={`text-xs font-bold mt-0.5 ${
-                        meal.completed
-                          ? 'text-zinc-400 dark:text-zinc-500 line-through'
-                          : 'text-zinc-900 dark:text-zinc-100'
-                      }`}
+          sortedMeals.map((meal) => {
+            const isReplacing = replacingMealId === meal.id;
+            const fullRecipe = findRecipeForMeal(meal);
+
+            return (
+              <div
+                key={meal.id || meal.title}
+                className={`premium-card rounded-3xl p-3.5 space-y-2.5 transition-all ${
+                  meal.completed ? 'opacity-70 bg-zinc-50/50 dark:bg-zinc-900/40' : ''
+                }`}
+              >
+                {/* Заголовок приема пищи и статус выполнения */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        triggerHaptic('medium');
+                        meal.id && onToggleMeal(meal.id, !meal.completed);
+                      }}
+                      className="text-zinc-400 hover:text-emerald-500 active:scale-90 transition-transform"
                     >
-                      {meal.title}
-                    </h4>
+                      {meal.completed ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500/10" />
+                      ) : (
+                        <Circle className="w-5 h-5" />
+                      )}
+                    </button>
+                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                      {mealLabels[meal.mealType]?.label || meal.mealType}
+                    </span>
+                  </div>
+
+                  <span className="text-[11px] font-bold text-zinc-500">
+                    {meal.calories} ккал
+                  </span>
+                </div>
+
+                {/* Название блюда и макросы */}
+                <div className="pl-7">
+                  <h4
+                    onClick={() => fullRecipe && setViewingRecipe(fullRecipe)}
+                    className="text-sm font-semibold text-zinc-900 dark:text-zinc-100 hover:text-emerald-500 cursor-pointer transition-colors"
+                  >
+                    {meal.title}
+                  </h4>
+                  <div className="flex items-center space-x-2 text-[10px] text-zinc-400 mt-0.5">
+                    <span>Б {meal.protein}г</span>
+                    <span>•</span>
+                    <span>Ж {meal.fat}г</span>
+                    <span>•</span>
+                    <span>У {meal.carbs}г</span>
                   </div>
                 </div>
 
-                <div className="text-right shrink-0">
-                  <span className="text-xs font-black text-zinc-800 dark:text-zinc-200">
-                    {meal.calories} <span className="text-[10px] font-normal text-zinc-400">ккал</span>
-                  </span>
-                  <p className="text-[10px] text-zinc-400">
-                    Б {meal.protein} · Ж {meal.fat} · У {meal.carbs}
-                  </p>
+                {/* Ингредиенты с бейджами наличия */}
+                {meal.ingredients && meal.ingredients.length > 0 && (
+                  <div className="pl-7 flex flex-wrap gap-1">
+                    {meal.ingredients.slice(0, 4).map((ing, idx) => {
+                      const inStock = pantryProducts.some((p) =>
+                        p.name.toLowerCase().includes(ing.name.toLowerCase())
+                      );
+                      return (
+                        <span
+                          key={idx}
+                          className={`text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                            inStock
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                              : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400'
+                          }`}
+                        >
+                          {inStock ? <Check className="w-2.5 h-2.5 text-emerald-500" /> : null}
+                          {ing.name}
+                        </span>
+                      );
+                    })}
+                    {meal.ingredients.length > 4 && (
+                      <span className="text-[10px] text-zinc-400 px-1 py-0.5">
+                        +{meal.ingredients.length - 4} ещё
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* Панель действий карточки */}
+                <div className="pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between pl-7 text-xs">
+                  <div className="flex items-center space-x-1">
+                    {/* Кнопка "Заменить" на случайное с учётом приоритета */}
+                    <button
+                      onClick={() => handleReplaceSingleMeal(meal)}
+                      disabled={isReplacing}
+                      className="px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1.5 font-semibold text-[11px] active:scale-95 transition-all"
+                      title={
+                        priority === 'pantry'
+                          ? 'Заменить на блюдо из продуктов в холодильнике'
+                          : 'Заменить на любое блюдо'
+                      }
+                    >
+                      <Shuffle
+                        className={`w-3.5 h-3.5 text-emerald-500 ${isReplacing ? 'animate-spin' : ''}`}
+                      />
+                      <span>Заменить</span>
+                    </button>
+
+                    {/* Кнопка просмотра рецепта */}
+                    {fullRecipe && (
+                      <button
+                        onClick={() => setViewingRecipe(fullRecipe)}
+                        className="px-2.5 py-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700 flex items-center gap-1 font-semibold text-[11px] active:scale-95 transition-all"
+                        title="Открыть рецепт"
+                      >
+                        <BookOpen className="w-3.5 h-3.5 text-zinc-400" />
+                        <span>Рецепт</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center space-x-1">
+                    {/* Кнопка "В покупки" */}
+                    <button
+                      onClick={() => handleAddMealToShopping(meal)}
+                      className="p-1.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-emerald-500 active:scale-95 transition-colors"
+                      title="Добавить недостающие ингредиенты в покупки"
+                    >
+                      <ShoppingCart className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Кнопка "Приготовил (списать)" */}
+                    {fullRecipe && (
+                      <button
+                        onClick={() => setCookingRecipe(fullRecipe)}
+                        className="px-2 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 flex items-center gap-1 font-semibold text-[11px] active:scale-95 transition-all"
+                        title="Приготовил — списать продукты"
+                      >
+                        <Utensils className="w-3.5 h-3.5" />
+                        <span>Приготовил</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-
-              {/* Точечная замена блюда (PRO фича) */}
-              <div className="mt-2.5 pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between">
-                <button
-                  onClick={() => handleSingleMealReplace(meal)}
-                  disabled={replacingMealId === meal.id}
-                  className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 hover:underline"
-                >
-                  {replacingMealId === meal.id ? (
-                    <>
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                      <span>ИИ подбирает замену...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Shuffle className="w-3 h-3" />
-                      <span>Заменить только это блюдо</span>
-                      {!isPro && (
-                        <span className="text-[9px] px-1 py-0.2 bg-amber-500/15 text-amber-500 rounded font-bold">
-                          PRO
-                        </span>
-                      )}
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 
-      {/* Модальное окно списка покупок на неделю с экспортом в Telegram */}
-      {isShoppingOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-background-light dark:bg-background-dark w-full max-w-md max-h-[85vh] rounded-3xl overflow-hidden shadow-2xl flex flex-col border border-zinc-200 dark:border-white/10">
-            <div className="p-4 border-b border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <ShoppingCart className="w-4 h-4 text-emerald-500" />
+      {/* Быстрое действие: Добавить все недостающие продукты дня в список покупок */}
+      {sortedMeals.length > 0 && (
+        <button
+          onClick={handleAddDayMissingToShopping}
+          className="w-full py-2.5 px-3 rounded-2xl bg-zinc-100 dark:bg-zinc-800/80 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+        >
+          <Plus className="w-4 h-4 text-emerald-500" />
+          <span>Добавить недостающие продукты дня в список покупок</span>
+        </button>
+      )}
+
+      {/* Модальное окно просмотра рецепта из плана */}
+      {viewingRecipe && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-md animate-fade-in">
+          <div className="premium-card rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-zinc-200 dark:border-white/10">
+            <div className="p-4 border-b border-zinc-100 dark:border-white/5 flex items-center justify-between">
+              <div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
-                  Список покупок на неделю
+                  {viewingRecipe.title}
                 </h3>
+                <span className="text-[11px] text-zinc-400">
+                  {viewingRecipe.calories} ккал · {viewingRecipe.prepTimeMinutes || 20} мин
+                </span>
               </div>
               <button
-                onClick={() => setIsShoppingOpen(false)}
-                className="text-zinc-400 hover:text-zinc-600"
+                onClick={() => setViewingRecipe(null)}
+                className="w-7 h-7 rounded-full bg-zinc-100 dark:bg-zinc-800 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 flex items-center justify-center"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
-                Сформировано автоматически по ингредиентам из недельного меню:
-              </p>
-              {shoppingList.map((item, i) => {
-                const isChecked = checkedItems[item.name];
-                return (
-                  <div
-                    key={i}
-                    onClick={() => {
-                      triggerHaptic('light');
-                      setCheckedItems((prev) => ({ ...prev, [item.name]: !prev[item.name] }));
-                    }}
-                    className={`flex items-center justify-between p-2.5 rounded-2xl cursor-pointer transition-all ${
-                      isChecked
-                        ? 'bg-zinc-100/60 dark:bg-zinc-800/40 text-zinc-400 line-through'
-                        : 'bg-zinc-50 dark:bg-zinc-800/80 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-                    }`}
-                  >
-                    <div className="flex items-center space-x-2.5">
+            <div className="p-4 overflow-y-auto space-y-4 text-xs">
+              {/* Ингредиенты */}
+              <div>
+                <h4 className="font-bold uppercase tracking-wider text-zinc-400 text-[10px] mb-2">
+                  Ингредиенты:
+                </h4>
+                <div className="space-y-1.5">
+                  {viewingRecipe.ingredients.map((ing, i) => {
+                    const inStock = pantryProducts.some((p) =>
+                      p.name.toLowerCase().includes(ing.name.toLowerCase())
+                    );
+                    return (
                       <div
-                        className={`w-4 h-4 rounded-md border flex items-center justify-center ${
-                          isChecked
-                            ? 'bg-emerald-500 border-emerald-500 text-white'
-                            : 'border-zinc-400'
-                        }`}
+                        key={i}
+                        className="flex items-center justify-between p-2 rounded-xl bg-zinc-50 dark:bg-zinc-800/40"
                       >
-                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                      <span className="text-xs font-semibold">{item.name}</span>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-zinc-500">{item.amount}</span>
-                      {item.inPantry && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 font-bold">
-                          в запасе
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">
+                          {inStock ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          ) : (
+                            <span className="w-2 h-2 rounded-full bg-amber-600/70" />
+                          )}
+                          {ing.name}
                         </span>
-                      )}
-                    </div>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {ing.amount} {ing.unit}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Пошаговое приготовление */}
+              {viewingRecipe.instructions && viewingRecipe.instructions.length > 0 && (
+                <div>
+                  <h4 className="font-bold uppercase tracking-wider text-zinc-400 text-[10px] mb-2">
+                    Приготовление:
+                  </h4>
+                  <div className="space-y-2">
+                    {viewingRecipe.instructions.map((step, idx) => (
+                      <div key={idx} className="flex gap-2">
+                        <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold flex items-center justify-center shrink-0 text-[10px]">
+                          {idx + 1}
+                        </span>
+                        <p className="text-zinc-600 dark:text-zinc-300 leading-relaxed">
+                          {step}
+                        </p>
+                      </div>
+                    ))}
                   </div>
-                );
-              })}
+                </div>
+              )}
             </div>
 
-            <div className="p-4 border-t border-zinc-200/80 dark:border-white/5 flex gap-2">
+            <div className="p-3 border-t border-zinc-100 dark:border-white/5 flex gap-2">
               <button
-                onClick={handleShareTelegram}
-                className="flex-1 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5"
-              >
-                <Send className="w-4 h-4" /> Отправить в Telegram
-              </button>
-              <button
-                onClick={() => setIsShoppingOpen(false)}
-                className="px-4 py-2.5 rounded-2xl bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-xs font-bold"
+                onClick={() => setViewingRecipe(null)}
+                className="py-2.5 px-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-xs font-semibold text-zinc-700 dark:text-zinc-300"
               >
                 Закрыть
+              </button>
+              <button
+                onClick={async () => {
+                  const calc = calculateDeductions(viewingRecipe.ingredients || [], pantryProducts);
+                  const missing = calc.missing;
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  for (const m of missing) {
+                    await db.shoppingList.add({
+                      name: m.name,
+                      amount: m.amount,
+                      unit: m.unit,
+                      checked: false,
+                      source: 'plan',
+                      addedAt: todayStr,
+                    });
+                  }
+                  triggerHaptic('success');
+                  showToast(
+                    missing.length > 0
+                      ? `Добавлено в покупки: ${missing.length} поз.`
+                      : 'Все ингредиенты есть в наличии!'
+                  );
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 flex items-center justify-center gap-1.5"
+              >
+                <ShoppingCart className="w-4 h-4" />
+                <span>Добавить в покупки</span>
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Модальное окно списания продуктов */}
+      {cookingRecipe && (
+        <CookConfirmModal
+          recipe={cookingRecipe}
+          pantry={pantryProducts}
+          isOpen={true}
+          onClose={() => setCookingRecipe(null)}
+          onConfirm={async (deductions, missingToAdd) => {
+            if (onCookRecipe) {
+              await onCookRecipe(cookingRecipe, deductions, missingToAdd);
+            }
+            setCookingRecipe(null);
+            triggerHaptic('success');
+            showToast('Продукты успешно списаны из холодильника!');
+          }}
+        />
       )}
     </div>
   );
