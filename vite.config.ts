@@ -8,11 +8,13 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['favicon.svg', 'robots.txt', 'sitemap.xml', 'og-image.svg'],
       manifest: {
         name: 'FoodKeeper — Умный трекер питания и холодильник',
         short_name: 'FoodKeeper',
-        description: 'Умный помощник по питанию: КБЖУ, холодильник, сканер этикеток с ИИ, рецепты и меню на неделю',
+        description: 'Умный помощник по питанию: КБЖУ, холодильник, сканер этикеток, рецепты и меню на неделю',
+        lang: 'ru',
+        categories: ['food', 'health', 'lifestyle', 'productivity'],
         theme_color: '#10b981',
         background_color: '#09090b',
         display: 'standalone',
