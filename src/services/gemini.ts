@@ -136,6 +136,7 @@ export async function parseProductLabel(
   "protein": число (белки на 100г, 1 знак после запятой),
   "fat": число (жиры на 100г, 1 знак после запятой),
   "carbs": число (углеводы на 100г, 1 знак после запятой),
+  "explicitExpiryDate": "ГГГГ-ММ-ДД если на фото видна точная дата окончания срока, иначе null",
   "daysUntilExpiry": число (ориентировочный срок годности в днях с текущего момента, например 5, 14, 30, 90)
 }
 Если какой-то параметр частично затёрт на фото, определи его по средним табличным значениям для данного типа продукта.
@@ -144,7 +145,9 @@ export async function parseProductLabel(
   const jsonStr = await callGemini(prompt, { ...options, apiKey: activeKey }, imageBase64);
   const parsed = JSON.parse(jsonStr);
 
-  const expiry = new Date(Date.now() + (Number(parsed.daysUntilExpiry) || 7) * 86400000)
+  const expiry = (parsed.explicitExpiryDate && /^\d{4}-\d{2}-\d{2}$/.test(parsed.explicitExpiryDate))
+    ? parsed.explicitExpiryDate
+    : new Date(Date.now() + (Number(parsed.daysUntilExpiry) || 7) * 86400000)
     .toISOString()
     .split('T')[0];
 

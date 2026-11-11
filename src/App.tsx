@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AnimatePresence, motion } from 'framer-motion';
 import { db, seedInitialDataIfNeeded } from './db';
@@ -9,9 +9,10 @@ import { SettingsModal } from './components/SettingsModal';
 import { PaywallModal } from './components/PaywallModal';
 import { DashboardScreen } from './components/DashboardScreen';
 import { FridgeScreen } from './components/FridgeScreen';
-import { ScannerScreen } from './components/ScannerScreen';
-import { RecipesScreen } from './components/RecipesScreen';
 import { ShoppingListScreen } from './components/ShoppingListScreen';
+const ScannerScreen = lazy(() => import('./components/ScannerScreen').then(m => ({ default: m.ScannerScreen })));
+const RecipesScreen = lazy(() => import('./components/RecipesScreen').then(m => ({ default: m.RecipesScreen })));
+
 
 import { initTelegramApp, triggerHaptic } from './services/telegram';
 import { getInitialTheme, applyThemeToDocument } from './services/theme';

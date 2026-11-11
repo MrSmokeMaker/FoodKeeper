@@ -8,9 +8,10 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "npx vite-node tests/inventory.test.mjs && npx vite-node tests/theme.test.mjs"
+    "test": "npx vite-node tests/inventory.test.mjs && npx vite-node tests/theme.test.mjs && npx vite-node tests/barcode.test.mjs"
   },
   "dependencies": {
+    "canvas-confetti": "^1.9.4",
     "clsx": "^2.1.1",
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",

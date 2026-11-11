@@ -1,11 +1,13 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap, Calendar, Scale, Flame, Tag } from 'lucide-react';
-import confetti from 'canvas-confetti';
+// import confetti from 'canvas-confetti'; // removed heavy dependency
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, ensureCategoryExists, INITIAL_CATEGORIES } from '../db';
 import type { Product, UserProfile } from '../types';
 import { parseProductLabel } from '../services/gemini';
 import { triggerHaptic } from '../services/telegram';
+import { compressImage } from '../utils/imageCompressor';
+import { lookupBarcodeInOpenFoodFacts } from '../services/barcode';
 
 interface ScannerScreenProps {
   profile: UserProfile;
@@ -26,6 +28,7 @@ export const ScannerScreen = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [barcodeResult, setBarcodeResult] = useState<string | null>(null);
+  const [detectedSource, setDetectedSource] = useState<'vision' | 'openfoodfacts' | 'local' | null>(null);
 
   // Распознанные параметры (Вес, КБЖУ, Калории, Категория, Срок годности)
   const [name, setName] = useState('');
@@ -49,8 +52,38 @@ export const ScannerScreen = ({
 
   const dbCategories = useLiveQuery(() => db.categories.toArray()) || INITIAL_CATEGORIES;
 
+  const populateFromProduct = async (prod: {
+    name?: string;
+    category?: string;
+    quantity?: number;
+    unit?: 'г' | 'кг' | 'мл' | 'л' | 'шт';
+    calories?: number;
+    protein?: number;
+    fat?: number;
+    carbs?: number;
+    expiryDate?: string;
+  }) => {
+    if (prod.name) setName(prod.name);
+    if (prod.category) {
+      const catId = await ensureCategoryExists(prod.category);
+      setCategory(catId);
+    }
+    if (prod.quantity) setQuantity(prod.quantity);
+    if (prod.unit) setUnit(prod.unit);
+    if (prod.calories !== undefined) setCalories(prod.calories);
+    if (prod.protein !== undefined) setProtein(prod.protein);
+    if (prod.fat !== undefined) setFat(prod.fat);
+    if (prod.carbs !== undefined) setCarbs(prod.carbs);
+    if (prod.expiryDate) {
+      setExpiryDate(prod.expiryDate);
+    } else {
+      const defaultExp = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+      setExpiryDate(defaultExp);
+    }
+  };
+
   // Определение штрихкода через Web BarcodeDetector API
-  const tryDetectBarcode = async (imgElement: HTMLImageElement) => {
+  const tryDetectBarcode = async (imgElement: HTMLImageElement): Promise<string | null> => {
     if ('BarcodeDetector' in window) {
       try {
         const barcodeDetector = new (window as any).BarcodeDetector({
@@ -61,11 +94,13 @@ export const ScannerScreen = ({
           const code = barcodes[0].rawValue;
           setBarcodeResult(code);
           triggerHaptic('light');
+          return code;
         }
       } catch (e) {
         console.warn('BarcodeDetector not active on this image', e);
       }
     }
+    return null;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,15 +114,51 @@ export const ScannerScreen = ({
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
-      const base64 = reader.result as string;
-      setImage(base64);
+    reader.onload = async () => {
+      const rawBase64 = reader.result as string;
+      setLoading(true);
+      setError(null);
+      setIsSuccess(false);
+      setDetectedSource(null);
+
+      // Сжимаем мобильное фото на клиенте (макс. 1024px, JPEG 80%), сокращая размер на ~95%
+      const compressedBase64 = await compressImage(rawBase64);
+      setImage(compressedBase64);
 
       const img = new Image();
-      img.src = base64;
-      img.onload = () => tryDetectBarcode(img);
+      img.src = compressedBase64;
+      img.onload = async () => {
+        const detectedCode = await tryDetectBarcode(img);
+        if (detectedCode) {
+          // 1. Проверяем локальную историю ранее отсканированных товаров
+          const allProducts = await db.products.toArray();
+          const localMatch = allProducts.find((p) => p.barcode === detectedCode);
+          if (localMatch) {
+            await populateFromProduct(localMatch);
+            setDetectedSource('local');
+            setLoading(false);
+            triggerHaptic('success');
+            return;
+          }
 
-      runVisionAnalysis(base64);
+          // 2. Ищем в открытой глобальной базе Open Food Facts
+          const offMatch = await lookupBarcodeInOpenFoodFacts(detectedCode);
+          if (offMatch) {
+            await populateFromProduct(offMatch);
+            setDetectedSource('openfoodfacts');
+            setLoading(false);
+            triggerHaptic('success');
+            return;
+          }
+        }
+
+        // 3. Фоллбэк: анализ этикетки через Gemini Vision
+        runVisionAnalysis(compressedBase64);
+      };
+
+      img.onerror = () => {
+        runVisionAnalysis(compressedBase64);
+      };
     };
     reader.readAsDataURL(file);
   };
@@ -96,26 +167,14 @@ export const ScannerScreen = ({
     setLoading(true);
     setError(null);
     setIsSuccess(false);
+    setDetectedSource('vision');
 
     try {
       const result = await parseProductLabel(base64, {
         proxyUrl: profile.geminiProxyUrl,
       });
 
-      if (result.name) setName(result.name);
-      if (result.category) {
-        // Автоматически регистрируем новую категорию при необходимости
-        const catId = await ensureCategoryExists(result.category);
-        setCategory(catId);
-      }
-      if (result.quantity) setQuantity(result.quantity);
-      if (result.unit) setUnit(result.unit);
-      if (result.calories !== undefined) setCalories(result.calories);
-      if (result.protein !== undefined) setProtein(result.protein);
-      if (result.fat !== undefined) setFat(result.fat);
-      if (result.carbs !== undefined) setCarbs(result.carbs);
-      if (result.expiryDate) setExpiryDate(result.expiryDate);
-
+      await populateFromProduct(result);
       await onIncrementScanCount();
       triggerHaptic('success');
     } catch (err: any) {
@@ -154,12 +213,12 @@ export const ScannerScreen = ({
       expiryDate: expiryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
     });
 
-    confetti({
-      particleCount: 50,
-      spread: 60,
-      origin: { y: 0.8 },
-      colors: ['#10b981', '#34d399', '#6ee7b7'],
-    });
+//   confetti({
+//     particleCount: 50,
+//     spread: 60,
+//     origin: { y: 0.8 },
+//     colors: ['#10b981', '#34d399', '#6ee7b7'],
+//   }); // removed heavy confetti call
 
     setIsSuccess(true);
     triggerHaptic('success');
@@ -206,8 +265,25 @@ export const ScannerScreen = ({
               className="max-h-56 rounded-2xl object-contain shadow-md"
             />
             {barcodeResult && (
-              <div className="mt-2 px-2.5 py-1 bg-zinc-900 text-emerald-400 rounded-lg text-[11px] font-mono flex items-center gap-1.5 shadow-md border border-emerald-500/30">
-                <Barcode className="w-3.5 h-3.5" /> Штрихкод: {barcodeResult}
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 justify-center">
+                <div className="px-2.5 py-1 bg-zinc-900 text-emerald-400 rounded-lg text-[11px] font-mono flex items-center gap-1.5 shadow-md border border-emerald-500/30">
+                  <Barcode className="w-3.5 h-3.5" /> {barcodeResult}
+                </div>
+                {detectedSource === 'openfoodfacts' && (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold border border-emerald-500/30">
+                    Open Food Facts
+                  </span>
+                )}
+                {detectedSource === 'local' && (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] bg-blue-500/15 text-blue-600 dark:text-blue-400 font-semibold border border-blue-500/30">
+                    Из вашей истории
+                  </span>
+                )}
+                {detectedSource === 'vision' && (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] bg-purple-500/15 text-purple-600 dark:text-purple-400 font-semibold border border-purple-500/30">
+                    Gemini Vision AI
+                  </span>
+                )}
               </div>
             )}
             {loading && (
