@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap, Calendar, Scale, Flame, Tag } from 'lucide-react';
-// import confetti from 'canvas-confetti'; // removed heavy dependency
+import confetti from 'canvas-confetti';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, ensureCategoryExists, INITIAL_CATEGORIES } from '../db';
 import type { Product, UserProfile } from '../types';
@@ -213,12 +213,12 @@ export const ScannerScreen = ({
       expiryDate: expiryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
     });
 
-//   confetti({
-//     particleCount: 50,
-//     spread: 60,
-//     origin: { y: 0.8 },
-//     colors: ['#10b981', '#34d399', '#6ee7b7'],
-//   }); // removed heavy confetti call
+    confetti({
+      particleCount: 50,
+      spread: 60,
+      origin: { y: 0.8 },
+      colors: ['#10b981', '#34d399', '#6ee7b7'],
+    });
 
     setIsSuccess(true);
     triggerHaptic('success');

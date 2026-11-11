@@ -137,7 +137,8 @@ export async function lookupBarcodeInOpenFoodFacts(
     const parsedQty = parseQuantityAndUnit(p.quantity || (p.product_quantity ? `${p.product_quantity} g` : undefined));
     const nutriments = p.nutriments || {};
 
-    const rawKcal = nutriments['energy-kcal_100g'] ?? nutriments['energy-kcal'] ?? (nutriments.energy_100g ? Number(nutriments.energy_100g) / 4.184 : 0);
+    const energyFromJoule = nutriments.energy_100g ? Number(nutriments.energy_100g) / 4.184 : 0;
+    const rawKcal = nutriments['energy-kcal_100g'] || nutriments['energy-kcal'] || energyFromJoule || 0;
     const calories = Math.round(Number(rawKcal) || 0);
 
     const protein = Math.round((Number(nutriments.proteins_100g) || 0) * 10) / 10;

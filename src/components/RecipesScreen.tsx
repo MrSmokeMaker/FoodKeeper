@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale, Search } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
@@ -25,7 +25,9 @@ export const RecipesScreen = ({
   onCookRecipe,
   onOpenPaywall,
 }: RecipesScreenProps) => {
-  const [activeTab, setActiveTab] = useState<'pantry' | 'catalog'>('pantry');
+  const [activeTab, setActiveTab] = useState<'pantry' | 'catalog'>('catalog');
+  const [selectedMealCategory, setSelectedMealCategory] = useState<string>('all');
+  const [recipeFilterQuery, setRecipeFilterQuery] = useState('');
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importInput, setImportInput] = useState('');
@@ -37,6 +39,13 @@ export const RecipesScreen = ({
   const [searchingCatalog, setSearchingCatalog] = useState(false);
 
   const isPro = profile.subscriptionTier === 'pro';
+
+  // Автоматическая подгрузка рецептов из библиотеки при пустой базе
+  useEffect(() => {
+    if (recipes.length === 0 && !syncing) {
+      syncOnlineRecipeCatalog().catch(console.warn);
+    }
+  }, [recipes.length]);
 
   // Расчет процента совпадения ингредиентов с холодильником
   const getPantryMatch = (recipe: Recipe) => {
@@ -166,7 +175,16 @@ export const RecipesScreen = ({
     setSelectedRecipe(null);
   };
 
-  const sortedRecipes = [...recipes].sort((a, b) => {
+  const filteredRecipes = recipes.filter((r) => {
+    const matchesMeal = selectedMealCategory === 'all' || r.category === selectedMealCategory;
+    const matchesSearch =
+      !recipeFilterQuery.trim() ||
+      r.title.toLowerCase().includes(recipeFilterQuery.toLowerCase()) ||
+      r.ingredients.some((i) => i.name.toLowerCase().includes(recipeFilterQuery.toLowerCase()));
+    return matchesMeal && matchesSearch;
+  });
+
+  const sortedRecipes = [...filteredRecipes].sort((a, b) => {
     if (activeTab === 'pantry') {
       const matchA = getPantryMatch(a).percent;
       const matchB = getPantryMatch(b).percent;
@@ -175,16 +193,23 @@ export const RecipesScreen = ({
     return 0;
   });
 
+  const mealCategoryLabels: Record<string, string> = {
+    breakfast: 'Завтрак',
+    lunch: 'Обед',
+    dinner: 'Ужин',
+    snack: 'Перекус',
+  };
+
   return (
     <div className="space-y-4 pb-28">
       {/* Шапка */}
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-black text-zinc-900 dark:text-zinc-50 flex items-center gap-2">
-            <ChefHat className="w-5 h-5 text-emerald-500" /> База рецептов
+            <ChefHat className="w-5 h-5 text-emerald-500" /> База рецептов ({recipes.length})
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Синхронизация с кулинарной библиотекой и точные граммовки
+            Синхронизация с библиотекой и точные граммовки
           </p>
         </div>
 
@@ -196,7 +221,7 @@ export const RecipesScreen = ({
             title="Синхронизировать с библиотекой"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-emerald-500 ${syncing ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Синхронизация</span>
+            <span className="hidden sm:inline">Обновить</span>
           </button>
           <button
             onClick={handleOpenImport}
@@ -213,40 +238,27 @@ export const RecipesScreen = ({
         </div>
       </div>
 
-      {/* Быстрый поиск в интернет-библиотеке */}
+      {/* Быстрый поиск в интернет-библиотеке с помощью ИИ */}
       <form onSubmit={handleSearchOnlineCatalog} className="flex gap-2">
         <input
           type="text"
           value={searchCatalogQuery}
           onChange={(e) => setSearchCatalogQuery(e.target.value)}
-          placeholder="Поиск рецепта в интернет-библиотеке (например: Сырники, Боул, Лазанья)..."
+          placeholder="Найти в открытой интернет-библиотеке (например: Лазанья, Паста)..."
           className="flex-1 px-3.5 py-2 text-xs rounded-2xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
         />
         <button
           type="submit"
           disabled={searchingCatalog || !searchCatalogQuery.trim()}
-          className="px-3.5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 disabled:opacity-50 flex items-center gap-1"
+          className="px-3.5 py-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shrink-0 disabled:opacity-50 flex items-center gap-1 shadow-sm"
         >
           {searchingCatalog ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-          <span>Найти</span>
+          <span>ИИ-поиск</span>
         </button>
       </form>
 
-      {/* Переключатель табов */}
+      {/* Переключатель табов: Каталог vs По наличию в холодильнике */}
       <div className="flex p-1 bg-zinc-100 dark:bg-zinc-900 rounded-2xl">
-        <button
-          onClick={() => {
-            triggerHaptic('light');
-            setActiveTab('pantry');
-          }}
-          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
-            activeTab === 'pantry'
-              ? 'bg-background-light dark:bg-background-dark text-emerald-600 dark:text-emerald-400 shadow-sm'
-              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
-          }`}
-        >
-          Из моего холодильника
-        </button>
         <button
           onClick={() => {
             triggerHaptic('light');
@@ -258,93 +270,170 @@ export const RecipesScreen = ({
               : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
           }`}
         >
-          Каталог ({recipes.length})
+          Вся библиотека ({recipes.length})
         </button>
+        <button
+          onClick={() => {
+            triggerHaptic('light');
+            setActiveTab('pantry');
+          }}
+          className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition-all ${
+            activeTab === 'pantry'
+              ? 'bg-background-light dark:bg-background-dark text-emerald-600 dark:text-emerald-400 shadow-sm'
+              : 'text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
+          }`}
+        >
+          По наличию в холодильнике
+        </button>
+      </div>
+
+      {/* Фильтр по типам приемов пищи и локальный поиск */}
+      <div className="space-y-2">
+        <div className="relative">
+          <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
+          <input
+            type="text"
+            value={recipeFilterQuery}
+            onChange={(e) => setRecipeFilterQuery(e.target.value)}
+            placeholder="Поиск по названию или ингредиенту (творог, лосось, рис)..."
+            className="w-full pl-9 pr-4 py-1.5 text-xs rounded-xl bg-background-light dark:bg-background-dark border border-zinc-200 dark:border-white/10 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+          />
+        </div>
+
+        <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+          {[
+            { id: 'all', label: 'Все блюда' },
+            { id: 'breakfast', label: '🍳 Завтраки' },
+            { id: 'lunch', label: '🥗 Обеды' },
+            { id: 'dinner', label: '🐟 Ужины' },
+            { id: 'snack', label: '🍓 Перекусы' },
+          ].map((meal) => (
+            <button
+              key={meal.id}
+              onClick={() => {
+                triggerHaptic('light');
+                setSelectedMealCategory(meal.id);
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-medium shrink-0 transition-all ${
+                selectedMealCategory === meal.id
+                  ? 'bg-emerald-600 text-white shadow-sm font-semibold'
+                  : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+              }`}
+            >
+              {meal.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Список карточек рецептов с граммовками */}
       <div className="space-y-3">
-        {sortedRecipes.map((recipe) => {
-          const match = getPantryMatch(recipe);
-
-          return (
-            <div
-              key={recipe.id}
-              onClick={() => {
-                triggerHaptic('light');
-                setSelectedRecipe(recipe);
-              }}
-              className="glass-card rounded-3xl p-4 cursor-pointer hover:border-emerald-500/40 transition-all shadow-sm group"
+        {sortedRecipes.length === 0 ? (
+          <div className="text-center py-10 glass-card rounded-3xl p-6 space-y-3">
+            <ChefHat className="w-12 h-12 text-zinc-300 dark:text-zinc-700 mx-auto" />
+            <p className="text-sm font-bold text-zinc-700 dark:text-zinc-300">
+              Рецепты не найдены
+            </p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 max-w-xs mx-auto">
+              Загрузите полную кулинарную библиотеку со сбалансированными рецептами и граммовками.
+            </p>
+            <button
+              onClick={handleSyncLibrary}
+              disabled={syncing}
+              className="px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-xs font-bold shadow-md shadow-emerald-600/20 inline-flex items-center gap-2"
             >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
-                      {recipe.category}
-                    </span>
-                    {recipe.importedFromWeb && (
-                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 flex items-center gap-1">
-                        <Globe className="w-2.5 h-2.5" /> Онлайн-каталог
+              <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+              <span>Загрузить базу рецептов библиотеки</span>
+            </button>
+          </div>
+        ) : (
+          sortedRecipes.map((recipe) => {
+            const match = getPantryMatch(recipe);
+
+            return (
+              <div
+                key={recipe.id}
+                onClick={() => {
+                  triggerHaptic('light');
+                  setSelectedRecipe(recipe);
+                }}
+                className="glass-card rounded-3xl p-4 cursor-pointer hover:border-emerald-500/40 transition-all shadow-sm group"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                        {mealCategoryLabels[recipe.category] || recipe.category}
                       </span>
-                    )}
-                  </div>
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 mt-1.5 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                    {recipe.title}
-                  </h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-1">
-                    {recipe.description}
-                  </p>
-                </div>
-              </div>
-
-              {/* Превью ингредиентов с граммовками */}
-              <div className="mt-2.5 flex flex-wrap gap-1">
-                {recipe.ingredients.slice(0, 4).map((ing, idx) => (
-                  <span
-                    key={idx}
-                    className="text-[10px] px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center gap-1"
-                  >
-                    <span>{ing.name}</span>
-                    <b className="text-emerald-600 dark:text-emerald-400">{ing.amount}{ing.unit}</b>
-                  </span>
-                ))}
-                {recipe.ingredients.length > 4 && (
-                  <span className="text-[10px] text-zinc-400 self-center">
-                    +{recipe.ingredients.length - 4} ещё
-                  </span>
-                )}
-              </div>
-
-              {/* Мэтчинг с холодильником и КБЖУ */}
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-100 dark:border-white/5">
-                <div className="flex items-center space-x-1.5 text-xs">
-                  <span
-                    className={`font-bold px-2 py-0.5 rounded-lg text-[10px] ${
-                      match.percent === 100
-                        ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                        : match.percent >= 50
-                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                        : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
-                    }`}
-                  >
-                    {match.percent === 100
-                      ? 'В наличии 100%'
-                      : `В наличии ${match.percent}% (докупить ${match.missingCount})`}
-                  </span>
-                </div>
-
-                <div className="flex items-center space-x-2 text-right">
-                  <div className="flex items-center text-[10px] text-zinc-400">
-                    <Clock className="w-3 h-3 mr-1" /> {recipe.prepTimeMinutes} мин
-                  </div>
-                  <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
-                    {recipe.calories} <span className="text-[10px] font-normal text-zinc-400">ккал</span>
+                      {recipe.importedFromWeb && (
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-500 flex items-center gap-1">
+                          <Globe className="w-2.5 h-2.5" /> Библиотека
+                        </span>
+                      )}
+                      {recipe.tags?.map((t, idx) => (
+                        <span key={idx} className="text-[9px] text-zinc-400 bg-zinc-100 dark:bg-zinc-800/60 px-1.5 py-0.5 rounded">
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                    <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-50 mt-1.5 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {recipe.title}
+                    </h3>
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 mt-1">
+                      {recipe.description}
+                    </p>
                   </div>
                 </div>
+
+                {/* Превью ингредиентов с точными граммовками */}
+                <div className="mt-2.5 flex flex-wrap gap-1">
+                  {recipe.ingredients.slice(0, 4).map((ing, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[10px] px-2 py-0.5 rounded-lg bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 flex items-center gap-1"
+                    >
+                      <span>{ing.name}</span>
+                      <b className="text-emerald-600 dark:text-emerald-400">{ing.amount}{ing.unit}</b>
+                    </span>
+                  ))}
+                  {recipe.ingredients.length > 4 && (
+                    <span className="text-[10px] text-zinc-400 self-center">
+                      +{recipe.ingredients.length - 4} ещё
+                    </span>
+                  )}
+                </div>
+
+                {/* Мэтчинг с холодильником и КБЖУ */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-100 dark:border-white/5">
+                  <div className="flex items-center space-x-1.5 text-xs">
+                    <span
+                      className={`font-bold px-2 py-0.5 rounded-lg text-[10px] ${
+                        match.percent === 100
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                          : match.percent >= 50
+                          ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                          : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
+                      }`}
+                    >
+                      {match.percent === 100
+                        ? 'В наличии 100%'
+                        : `В наличии ${match.percent}% (докупить ${match.missingCount})`}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-2 text-right">
+                    <div className="flex items-center text-[10px] text-zinc-400">
+                      <Clock className="w-3 h-3 mr-1" /> {recipe.prepTimeMinutes} мин
+                    </div>
+                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      {recipe.calories} <span className="text-[10px] font-normal text-zinc-400">ккал</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
 
       {/* Модальное окно просмотра рецепта с обязательными граммовками */}
