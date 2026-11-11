@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { AnimatePresence, motion } from 'framer-motion';
-import { db, seedInitialDataIfNeeded } from './db';
+import { db, seedInitialDataIfNeeded, syncOnlineRecipeCatalog } from './db';
 import type { Product, Recipe, MealPlanItem, UserProfile } from './types';
 import { Navbar, type TabType } from './components/Navbar';
 import { Header } from './components/Header';
@@ -34,9 +34,11 @@ export function App() {
     return getInitialTheme(tg.colorScheme) === 'dark';
   });
 
-  // Инициализация базы данных и Telegram WebApp при старте
+  // Инициализация базы данных, рецептов и Telegram WebApp при старте
   useEffect(() => {
-    seedInitialDataIfNeeded();
+    seedInitialDataIfNeeded().then(() => {
+      syncOnlineRecipeCatalog().catch((err) => console.warn('Recipe library auto-sync:', err));
+    });
     const tg = initTelegramApp();
     if (tg.isTg && tg.user) {
       db.userProfile.toCollection().first().then((p) => {
@@ -59,7 +61,7 @@ export function App() {
   // Реактивные запросы к локальной базе IndexedDB через Dexie
   const profile = useLiveQuery(() => db.userProfile.toCollection().first());
   const products = useLiveQuery(() => db.products.toArray()) || [];
-  const recipes = useLiveQuery(() => db.recipes.toArray()) || [];
+  const recipes = useLiveQuery(() => db.recipes.toArray(), []) || [];
   const mealPlan = useLiveQuery(() => db.mealPlan.toArray()) || [];
   const weightLogs = useLiveQuery(() => db.weightLogs.toArray()) || [];
   const shoppingItems = useLiveQuery(() => db.shoppingList.toArray()) || [];

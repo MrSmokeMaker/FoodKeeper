@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChefHat, Globe, Clock, Sparkles, Check, ExternalLink, X, Utensils, AlertCircle, RefreshCw, Scale, Search } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { triggerConfetti } from '../utils/confetti';
 import { syncOnlineRecipeCatalog, ensureCategoryExists } from '../db';
 import type { Recipe, Product, UserProfile } from '../types';
 import { parseRecipeFromWeb, searchOnlineRecipesViaAI } from '../services/gemini';
@@ -85,7 +85,7 @@ export const RecipesScreen = ({
     try {
       const count = await syncOnlineRecipeCatalog();
       triggerHaptic('success');
-      confetti({ particleCount: 50, spread: 60 });
+      triggerConfetti({ particleCount: 50, spread: 60 });
       alert(count > 0 ? `Добавлено ${count} новых сбалансированных рецептов с точными граммовками!` : 'База рецептов уже полностью синхронизирована с библиотекой.');
     } catch (e: any) {
       alert('Ошибка синхронизации: ' + e.message);
@@ -119,7 +119,7 @@ export const RecipesScreen = ({
         await onAddRecipe(r);
       }
 
-      confetti({ particleCount: 45, spread: 55 });
+      triggerConfetti({ particleCount: 45, spread: 55 });
       setSearchCatalogQuery('');
       triggerHaptic('success');
     } catch (err: any) {
@@ -152,7 +152,7 @@ export const RecipesScreen = ({
       await onAddRecipe(parsed);
       setIsImportModalOpen(false);
       setImportInput('');
-      confetti({ particleCount: 40, spread: 50 });
+      triggerConfetti({ particleCount: 40, spread: 50 });
       triggerHaptic('success');
     } catch (err: any) {
       setImportError(err.message || 'Не удалось импортировать рецепт.');
@@ -170,7 +170,7 @@ export const RecipesScreen = ({
     if (!selectedRecipe) return;
     triggerHaptic('success');
     await onCookRecipe(selectedRecipe, deductions, missingToAdd);
-    confetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
+    triggerConfetti({ particleCount: 60, spread: 70, origin: { y: 0.6 } });
     setIsCookModalOpen(false);
     setSelectedRecipe(null);
   };

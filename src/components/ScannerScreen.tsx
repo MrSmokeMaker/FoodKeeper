@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { Camera, Upload, Sparkles, Check, RefreshCw, AlertCircle, Barcode, Zap, Calendar, Scale, Flame, Tag } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { triggerConfetti } from '../utils/confetti';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db, ensureCategoryExists, INITIAL_CATEGORIES } from '../db';
 import type { Product, UserProfile } from '../types';
@@ -213,7 +213,7 @@ export const ScannerScreen = ({
       expiryDate: expiryDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
     });
 
-    confetti({
+    triggerConfetti({
       particleCount: 50,
       spread: 60,
       origin: { y: 0.8 },
