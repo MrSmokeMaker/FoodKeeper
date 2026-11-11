@@ -93,7 +93,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     (a, b) => (order[a.mealType] || 9) - (order[b.mealType] || 9)
   );
 
-  // Расчет КБЖУ за выбранный день (съеденное / запланированное)
+  // Расчет КБЖУ за выбранный день (съеденное)
   const consumed = sortedMeals
     .filter((m) => m.completed)
     .reduce(
@@ -107,19 +107,19 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     );
 
   const targetCal = profile.targetCalories || 2000;
-  const calPercent = Math.min(Math.round((consumed.calories / targetCal) * 100), 100);
-  const pPercent = Math.min(Math.round((consumed.protein / (profile.targetProtein || 140)) * 100), 100);
-  const fPercent = Math.min(Math.round((consumed.fat / (profile.targetFat || 70)) * 100), 100);
-  const cPercent = Math.min(Math.round((consumed.carbs / (profile.targetCarbs || 210)) * 100), 100);
+  const calPercent = Math.min(100, Math.round((consumed.calories / targetCal) * 100));
+  const pPercent = Math.min(100, Math.round((consumed.protein / (profile.targetProtein || 120)) * 100));
+  const fPercent = Math.min(100, Math.round((consumed.fat / (profile.targetFat || 65)) * 100));
+  const cPercent = Math.min(100, Math.round((consumed.carbs / (profile.targetCarbs || 220)) * 100));
 
   const mealTypeLabels: Record<string, string> = {
-    breakfast: '1. Завтрак',
-    lunch: '2. Обед',
-    snack: '3. Полдник / Перекус',
-    dinner: '4. Ужин',
+    breakfast: 'Завтрак',
+    lunch: 'Обед',
+    snack: 'Перекус',
+    dinner: 'Ужин',
   };
 
-  // Мгновенное списание продуктов при отметке блюда (Пользователь выбрал "Мгновенно")
+  // Мгновенное списание продуктов при отметке блюда
   const handleMealCheck = async (meal: MealPlanItem) => {
     if (!meal.id) return;
     triggerHaptic('light');
@@ -127,7 +127,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     const nextState = !meal.completed;
 
     if (nextState) {
-      // 1. Извлекаем ингредиенты (из meal.ingredients, recipeId или заголовка)
       let ings = meal.ingredients || [];
       if (ings.length === 0 && meal.recipeId) {
         const foundRec = recipes.find((r) => r.id === meal.recipeId);
@@ -137,21 +136,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         ings = parseIngredientsFromTitle(meal.title);
       }
 
-      // 2. Рассчитываем списание
       const calcResult = calculateDeductions(ings, pantryProducts);
 
-      // 3. Мгновенно применяем списание в БД
       if (calcResult.deductions.length > 0) {
         await applyDeductionsToDb(calcResult.deductions);
       }
 
-      // 4. Добавляем недостающее в список покупок (Пользователь выбрал "Да")
       let missingCount = 0;
       if (calcResult.missing.length > 0) {
         missingCount = await addMissingToShoppingList(calcResult.missing);
       }
 
-      // 5. Запоминаем для возможности мгновенной отмены
       setLastDeduction({
         mealId: meal.id,
         mealTitle: meal.title,
@@ -160,9 +155,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       });
 
       triggerHaptic('success');
-      confetti({ particleCount: 35, spread: 50, origin: { y: 0.7 } });
+      confetti({ particleCount: 30, spread: 45, origin: { y: 0.7 } });
     } else {
-      // Снятие отметки
       if (lastDeduction && lastDeduction.mealId === meal.id) {
         await restoreDeductionsToDb(lastDeduction.deductions);
         setLastDeduction(null);
@@ -172,7 +166,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     await onToggleMeal(meal.id, nextState);
   };
 
-  // Отмена последнего списания (Undo)
   const handleUndoDeduction = async () => {
     if (!lastDeduction) return;
     triggerHaptic('medium');
@@ -192,7 +185,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     triggerHaptic('light');
     try {
       await onGenerateWeeklyPlan();
-      confetti({ particleCount: 60, spread: 70 });
+      confetti({ particleCount: 50, spread: 60 });
     } finally {
       setGenerating(false);
     }
@@ -219,52 +212,52 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     <div className="space-y-4 pb-28">
       {/* Всплывающее уведомление о списании (Toast / Undo bar) */}
       {lastDeduction && (
-        <div className="p-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xl flex items-center justify-between text-xs animate-fade-in">
+        <div className="p-3 rounded-2xl glass-dock bg-emerald-600/90 text-white shadow-xl flex items-center justify-between text-xs animate-fade-in border border-emerald-400/30">
           <div className="flex items-center gap-2 truncate pr-2">
             <Check className="w-4 h-4 shrink-0 text-emerald-200" />
-            <span className="truncate">
+            <span className="truncate font-medium">
               Списано ({lastDeduction.deductions.length} прод.)
               {lastDeduction.missingCount > 0 && ` · +${lastDeduction.missingCount} в покупки`}
             </span>
           </div>
           <button
             onClick={handleUndoDeduction}
-            className="px-2.5 py-1 rounded-xl bg-background-light/20 hover:bg-background-light/30 text-white font-bold text-[11px] shrink-0 flex items-center gap-1 active:scale-95 transition-all"
+            className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-white font-semibold text-[11px] shrink-0 flex items-center gap-1 active:scale-95 transition-all"
           >
             <Undo2 className="w-3 h-3" /> Отменить
           </button>
         </div>
       )}
 
-      {/* 7-дневный селектор недели */}
-      <div className="glass-card rounded-3xl p-3 shadow-xs space-y-2.5">
+      {/* 7-дневный селектор недели (Apple Calendar Strip) */}
+      <div className="premium-card rounded-3xl p-3 space-y-2.5">
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-1.5">
             <CalendarDays className="w-4 h-4 text-emerald-500" />
-            <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
-              Рацион на 7 дней
+            <span className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">
+              Календарь питания
             </span>
           </div>
 
           <button
             onClick={handleGenerate}
             disabled={generating}
-            className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white text-[11px] font-bold shadow-sm flex items-center gap-1 hover:opacity-95 disabled:opacity-50 active:scale-95 transition-all"
+            className="px-2.5 py-1 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-950 text-[11px] font-semibold flex items-center gap-1 hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
           >
             {generating ? (
               <>
                 <RefreshCw className="w-3 h-3 animate-spin" />
-                <span>Генерация...</span>
+                <span>План...</span>
               </>
             ) : isPro ? (
               <>
-                <Sparkles className="w-3 h-3" />
-                <span>ИИ План 7 дн</span>
+                <Sparkles className="w-3 h-3 text-emerald-400 dark:text-emerald-600" />
+                <span>ИИ 7 дней</span>
               </>
             ) : (
               <>
-                <Zap className="w-3 h-3 fill-white" />
-                <span>PRO План</span>
+                <Zap className="w-3 h-3 fill-amber-400 text-amber-400" />
+                <span>PRO меню</span>
               </>
             )}
           </button>
@@ -282,159 +275,163 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 }}
                 className={`flex-1 min-w-[3rem] py-2 rounded-2xl flex flex-col items-center justify-center transition-all ${
                   isSelected
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-bold scale-[1.02]'
-                    : 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                    ? 'bg-emerald-500 text-white shadow-md shadow-emerald-500/25 font-bold scale-[1.02]'
+                    : 'bg-zinc-100/80 dark:bg-zinc-800/50 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-200/80 dark:hover:bg-zinc-800'
                 }`}
               >
-                <span className="text-[9px] uppercase tracking-wider">
+                <span className="text-[9px] uppercase tracking-wider font-medium">
                   {d.isToday ? 'Сегодня' : d.dayName}
                 </span>
-                <span className="text-sm font-black mt-0.5">{d.dayNum}</span>
+                <span className="text-sm font-bold mt-0.5 tracking-tight">{d.dayNum}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Виджет калорий и КБЖУ для выбранного дня */}
-      <div className="glass-card rounded-3xl p-5 shadow-sm relative overflow-hidden">
+      {/* Премиальный виджет КБЖУ: Activity Ring + Макросы */}
+      <div className="premium-card rounded-3xl p-5 relative overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-zinc-400">
               {weekDays[selectedDayOffset]?.isToday
-                ? 'Сегодняшний рацион'
+                ? 'Энергетический баланс'
                 : `Баланс на ${weekDays[selectedDayOffset]?.dayNum} ${weekDays[selectedDayOffset]?.dayName}`}
             </span>
-            <div className="flex items-baseline space-x-1.5 mt-0.5">
-              <span className="text-3xl font-black text-zinc-900 dark:text-zinc-50 tracking-tight">
+            <div className="flex items-baseline space-x-1.5 mt-1">
+              <span className="text-3xl font-extrabold text-zinc-900 dark:text-zinc-50 tracking-tight">
                 {consumed.calories}
               </span>
-              <span className="text-sm font-semibold text-zinc-400">
+              <span className="text-sm font-medium text-zinc-400">
                 / {targetCal} ккал
               </span>
             </div>
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+              Осталось: <span className="font-semibold text-zinc-700 dark:text-zinc-300">{Math.max(0, targetCal - consumed.calories)} ккал</span>
+            </p>
           </div>
 
-          <div className="relative w-16 h-16 flex items-center justify-center">
+          {/* Activity Ring (Кольцо активности в стиле Apple Fitness) */}
+          <div className="relative w-20 h-20 flex items-center justify-center shrink-0">
             <svg className="w-full h-full transform -rotate-90">
               <circle
-                cx="32"
-                cy="32"
-                r="26"
+                cx="40"
+                cy="40"
+                r="32"
                 stroke="currentColor"
-                strokeWidth="5"
+                strokeWidth="6"
                 fill="transparent"
-                className="text-zinc-200 dark:text-zinc-800"
+                className="text-zinc-100 dark:text-zinc-800/80"
               />
               <circle
-                cx="32"
-                cy="32"
-                r="26"
+                cx="40"
+                cy="40"
+                r="32"
                 stroke="currentColor"
-                strokeWidth="5"
+                strokeWidth="6"
                 fill="transparent"
-                strokeDasharray="163.3"
-                strokeDashoffset={163.3 - (163.3 * calPercent) / 100}
+                strokeDasharray="201.06"
+                strokeDashoffset={201.06 - (201.06 * calPercent) / 100}
                 strokeLinecap="round"
                 className="text-emerald-500 transition-all duration-700 ease-out"
               />
             </svg>
-            <div className="absolute flex flex-col items-center">
-              <Flame className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-bold text-zinc-700 dark:text-zinc-200">
+            <div className="absolute flex flex-col items-center justify-center text-center">
+              <Flame className="w-4 h-4 text-emerald-500 mb-0.5" />
+              <span className="text-xs font-bold text-zinc-800 dark:text-zinc-100 leading-none">
                 {calPercent}%
               </span>
             </div>
           </div>
         </div>
 
-        {/* Прогресс-бары КБЖУ */}
-        <div className="grid grid-cols-3 gap-3 pt-2 border-t border-zinc-100 dark:border-white/5">
-          <div>
-            <div className="flex justify-between text-[11px] font-medium mb-1">
+        {/* Микро-трекеры БЖУ */}
+        <div className="grid grid-cols-3 gap-3 pt-3.5 border-t border-zinc-100 dark:border-white/[0.06]">
+          <div className="bg-zinc-50/70 dark:bg-white/[0.02] p-2.5 rounded-2xl border border-zinc-100 dark:border-white/[0.04]">
+            <div className="flex justify-between text-[11px] font-medium mb-1.5">
               <span className="text-zinc-500 dark:text-zinc-400">Белки</span>
-              <span className="font-bold text-blue-500">{consumed.protein}г</span>
+              <span className="font-bold text-sky-500">{consumed.protein}г</span>
             </div>
-            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-zinc-200/60 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                className="bg-sky-500 h-full rounded-full transition-all duration-500"
                 style={{ width: `${pPercent}%` }}
               />
             </div>
-            <span className="text-[9px] text-zinc-400 mt-0.5 block text-right">
+            <span className="text-[9px] text-zinc-400 mt-1 block text-right font-medium">
               из {profile.targetProtein}г
             </span>
           </div>
 
-          <div>
-            <div className="flex justify-between text-[11px] font-medium mb-1">
+          <div className="bg-zinc-50/70 dark:bg-white/[0.02] p-2.5 rounded-2xl border border-zinc-100 dark:border-white/[0.04]">
+            <div className="flex justify-between text-[11px] font-medium mb-1.5">
               <span className="text-zinc-500 dark:text-zinc-400">Жиры</span>
               <span className="font-bold text-amber-500">{consumed.fat}г</span>
             </div>
-            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-zinc-200/60 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
               <div
                 className="bg-amber-500 h-full rounded-full transition-all duration-500"
                 style={{ width: `${fPercent}%` }}
               />
             </div>
-            <span className="text-[9px] text-zinc-400 mt-0.5 block text-right">
+            <span className="text-[9px] text-zinc-400 mt-1 block text-right font-medium">
               из {profile.targetFat}г
             </span>
           </div>
 
-          <div>
-            <div className="flex justify-between text-[11px] font-medium mb-1">
+          <div className="bg-zinc-50/70 dark:bg-white/[0.02] p-2.5 rounded-2xl border border-zinc-100 dark:border-white/[0.04]">
+            <div className="flex justify-between text-[11px] font-medium mb-1.5">
               <span className="text-zinc-500 dark:text-zinc-400">Углеводы</span>
-              <span className="font-bold text-purple-500">{consumed.carbs}г</span>
+              <span className="font-bold text-emerald-500">{consumed.carbs}г</span>
             </div>
-            <div className="w-full bg-zinc-100 dark:bg-zinc-800 h-2 rounded-full overflow-hidden">
+            <div className="w-full bg-zinc-200/60 dark:bg-zinc-800 h-1.5 rounded-full overflow-hidden">
               <div
-                className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
                 style={{ width: `${cPercent}%` }}
               />
             </div>
-            <span className="text-[9px] text-zinc-400 mt-0.5 block text-right">
+            <span className="text-[9px] text-zinc-400 mt-1 block text-right font-medium">
               из {profile.targetCarbs}г
             </span>
           </div>
         </div>
       </div>
 
-      {/* 4 приёма пищи на выбранный день */}
-      <div className="space-y-2.5">
+      {/* Сгруппированный список приемов пищи (Apple Grouped List) */}
+      <div className="space-y-2">
         <div className="flex items-center justify-between px-1">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center space-x-1.5">
             <Utensils className="w-4 h-4 text-emerald-500" />
-            <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
               Приёмы пищи ({sortedMeals.length})
             </h3>
           </div>
-          <span className="text-xs text-zinc-400">
-            {sortedMeals.filter((m) => m.completed).length} из {sortedMeals.length} съедено
+          <span className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            {sortedMeals.filter((m) => m.completed).length} из {sortedMeals.length} готово
           </span>
         </div>
 
         {sortedMeals.length === 0 ? (
-          <div className="glass-card rounded-2xl p-6 text-center space-y-2">
+          <div className="premium-card rounded-3xl p-6 text-center space-y-2">
             <p className="text-xs text-zinc-400">
               На этот день пока нет составленного меню.
             </p>
             <button
               onClick={handleGenerate}
-              className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-xs inline-flex items-center gap-1.5 shadow-sm transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5" /> Сгенерировать меню
+              <Sparkles className="w-3.5 h-3.5" /> Сгенерировать рацион
             </button>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="premium-card rounded-3xl divide-y divide-zinc-100 dark:divide-white/[0.05] overflow-hidden">
             {sortedMeals.map((meal) => (
               <div
                 key={meal.id}
-                className={`glass-card rounded-2xl p-3.5 transition-all ${
+                className={`p-3.5 transition-colors ${
                   meal.completed
-                    ? 'border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-500/10'
-                    : 'hover:border-zinc-300 dark:hover:border-white/20'
+                    ? 'bg-emerald-500/[0.03] dark:bg-emerald-500/[0.06]'
+                    : 'hover:bg-zinc-50/50 dark:hover:bg-white/[0.02]'
                 }`}
               >
                 <div className="flex items-start justify-between">
@@ -445,17 +442,17 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                       className="mt-0.5 text-zinc-400 hover:text-emerald-500 focus:outline-none shrink-0"
                     >
                       {meal.completed ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500/20" />
+                        <CheckCircle2 className="w-5 h-5 text-emerald-500 fill-emerald-500/15" />
                       ) : (
                         <Circle className="w-5 h-5 hover:text-emerald-500 transition-colors" />
                       )}
                     </button>
                     <div className="min-w-0">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block">
                         {mealTypeLabels[meal.mealType] || meal.mealType}
                       </span>
                       <p
-                        className={`text-xs font-semibold leading-snug mt-0.5 ${
+                        className={`text-xs font-medium leading-snug mt-0.5 ${
                           meal.completed
                             ? 'text-zinc-400 dark:text-zinc-500 line-through'
                             : 'text-zinc-900 dark:text-zinc-100'
@@ -467,7 +464,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   </div>
 
                   <div className="text-right shrink-0">
-                    <span className="text-xs font-black text-zinc-800 dark:text-zinc-200">
+                    <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
                       {meal.calories} <span className="text-[10px] font-normal text-zinc-400">ккал</span>
                     </span>
                     <p className="text-[10px] text-zinc-400">
@@ -477,23 +474,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </div>
 
                 {/* Замена блюда */}
-                <div className="mt-2 pt-2 border-t border-zinc-100 dark:border-white/5 flex items-center justify-between text-[11px]">
+                <div className="mt-2.5 pt-2 flex items-center justify-between text-[11px]">
                   <button
                     onClick={() => handleReplace(meal)}
                     disabled={replacingMealId === meal.id}
-                    className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1 hover:underline"
+                    className="text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 font-medium flex items-center gap-1 transition-colors"
                   >
                     {replacingMealId === meal.id ? (
                       <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                        <span>Подбор замены...</span>
+                        <RefreshCw className="w-3 h-3 animate-spin text-emerald-500" />
+                        <span>Подбор...</span>
                       </>
                     ) : (
                       <>
                         <Shuffle className="w-3 h-3" />
-                        <span>Заменить блюдо</span>
+                        <span>Заменить</span>
                         {!isPro && (
-                          <span className="text-[9px] px-1 py-0.2 bg-amber-500/15 text-amber-500 rounded font-bold">
+                          <span className="text-[9px] px-1 py-0.2 bg-amber-500/10 text-amber-500 rounded-full font-bold">
                             PRO
                           </span>
                         )}
@@ -502,7 +499,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   </button>
 
                   <span className="text-[10px] text-zinc-400">
-                    {meal.completed ? '✓ Списано из холодильника' : 'Кликните для автосписания'}
+                    {meal.completed ? '✓ Списано со склада' : 'Нажмите для автосписания'}
                   </span>
                 </div>
               </div>
@@ -513,28 +510,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
       {/* Оповещение: продукты на исходе срока годности */}
       {expiringProducts.length > 0 && (
-        <div className="bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-transparent p-4 rounded-3xl border border-amber-500/20">
+        <div className="p-3.5 rounded-3xl bg-amber-500/[0.08] dark:bg-amber-400/[0.06] border border-amber-500/20">
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1.5">
               <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
-              <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
+              <span className="text-xs font-semibold text-amber-700 dark:text-amber-300">
                 Истекает срок ({expiringProducts.length})
               </span>
             </div>
             <button
               onClick={onNavigateToFridge}
-              className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 flex items-center hover:underline"
+              className="text-[11px] font-medium text-amber-700 dark:text-amber-300 flex items-center hover:underline"
             >
               В холодильник <ArrowRight className="w-3 h-3 ml-0.5" />
             </button>
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1 pt-1 no-scrollbar">
+          <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5 no-scrollbar">
             {expiringProducts.map((p) => (
               <div
                 key={p.id}
                 onClick={onNavigateToRecipes}
-                className="bg-background-light/90 dark:bg-background-dark/90 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/15 shadow-sm cursor-pointer hover:border-amber-500/40 transition-colors"
+                className="bg-white/80 dark:bg-zinc-900/80 rounded-2xl p-2.5 shrink-0 w-36 border border-amber-500/20 shadow-xs cursor-pointer hover:border-amber-500/40 transition-colors"
               >
                 <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100 truncate block">
                   {p.name}
@@ -542,7 +539,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <span className="text-[10px] text-zinc-400 block mt-0.5">
                   {p.quantity} {p.unit}
                 </span>
-                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 block mt-1">
+                <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 block mt-1">
                   До: {p.expiryDate}
                 </span>
               </div>

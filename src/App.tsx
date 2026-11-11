@@ -263,9 +263,9 @@ export function App() {
   const currentProfile = profile || defaultProfile;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50/50 via-zinc-50 to-teal-50/30 dark:bg-gradient-to-b dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900 text-zinc-900 dark:text-zinc-50 flex flex-col font-sans transition-colors duration-300 relative selection:bg-emerald-500/25 selection:text-emerald-500">
-      {/* Декоративные световые акценты на фоне */}
-      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-96 bg-gradient-to-b from-emerald-500/10 via-teal-500/5 to-transparent blur-3xl pointer-events-none -z-10" />
+    <div className="min-h-screen bg-slate-50/80 dark:bg-[#090d16] text-zinc-900 dark:text-zinc-50 flex flex-col font-sans transition-colors duration-200 relative selection:bg-emerald-500/20 selection:text-emerald-500">
+      {/* Декоративные мягкие световые акценты на фоне */}
+      <div className="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-96 bg-gradient-to-b from-emerald-500/[0.07] to-transparent blur-3xl pointer-events-none -z-10" />
 
       {/* Шапка */}
       <Header
@@ -277,7 +277,7 @@ export function App() {
       />
 
       {/* Основной контент */}
-      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3.5 pb-24">
+      <main className="flex-1 max-w-md w-full mx-auto px-4 pt-3.5 pb-28">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
