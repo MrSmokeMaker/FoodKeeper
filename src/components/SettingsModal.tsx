@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Target, Calculator, Check, Zap, Globe, Bell, ShieldAlert, Utensils, User, LogIn } from 'lucide-react';
+import { X, Target, Calculator, Check, Zap, Globe, Bell, ShieldAlert, Utensils, User, LogIn, HelpCircle } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 import { requestNotificationPermission, isNotificationSupported } from '../services/notifications';
@@ -11,6 +11,7 @@ interface SettingsModalProps {
   onSaveProfile: (updated: Partial<UserProfile>) => Promise<void>;
   onOpenPaywall: () => void;
   onOpenAuth?: () => void;
+  onOpenTutorial?: () => void;
 }
 
 export const SettingsModal = ({
@@ -20,6 +21,7 @@ export const SettingsModal = ({
   onSaveProfile,
   onOpenPaywall,
   onOpenAuth,
+  onOpenTutorial,
 }: SettingsModalProps) => {
   const [name, setName] = useState(profile?.name || '');
   const [proxyUrl, setProxyUrl] = useState(profile?.geminiProxyUrl || '');
@@ -537,6 +539,27 @@ export const SettingsModal = ({
               </div>
             )}
           </div>
+
+          {/* Интерактивное обучение и тур */}
+          {onOpenTutorial && (
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  onClose();
+                  onOpenTutorial();
+                }}
+                className="w-full py-2.5 px-3.5 rounded-2xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 text-xs font-semibold flex items-center justify-between transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-emerald-500" />
+                  <span>Интерактивное обучение (Тур по функциям)</span>
+                </div>
+                <span className="text-[10px] opacity-75">Пройти заново →</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Футер */}

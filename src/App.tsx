@@ -8,6 +8,7 @@ import { Header } from './components/Header';
 import { SettingsModal } from './components/SettingsModal';
 import { PaywallModal } from './components/PaywallModal';
 import { AuthModal } from './components/AuthModal';
+import { OnboardingTourModal } from './components/OnboardingTourModal';
 import { DashboardScreen } from './components/DashboardScreen';
 import { PlannerScreen } from './components/PlannerScreen';
 import { FridgeScreen } from './components/FridgeScreen';
@@ -38,6 +39,22 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(() => {
+    try {
+      return !localStorage.getItem('foodkeeper_onboarding_completed');
+    } catch {
+      return false;
+    }
+  });
+
+  const handleCloseOnboarding = () => {
+    setIsOnboardingOpen(false);
+    try {
+      localStorage.setItem('foodkeeper_onboarding_completed', 'true');
+    } catch (e) {
+      console.warn('LocalStorage save failed:', e);
+    }
+  };
   const [isDark, setIsDark] = useState<boolean>(() => {
     const tg = initTelegramApp();
     return getInitialTheme(tg.colorScheme) === 'dark';
@@ -409,6 +426,7 @@ export function App() {
                 onUpdateQuantity={handleUpdateQuantity}
                 onNavigateToScanner={() => setActiveTab('scanner')}
                 onOpenPaywall={() => setIsPaywallOpen(true)}
+                onOpenTutorial={() => setIsOnboardingOpen(true)}
               />
             )}
 
@@ -474,6 +492,10 @@ export function App() {
           setIsSettingsOpen(false);
           setIsAuthOpen(true);
         }}
+        onOpenTutorial={() => {
+          setIsSettingsOpen(false);
+          setIsOnboardingOpen(true);
+        }}
       />
 
       {/* Модальное окно аутентификации */}
@@ -489,6 +511,15 @@ export function App() {
         onClose={() => setIsPaywallOpen(false)}
         onUpgradeToPro={handleUpgradeToPro}
         currentTier={currentProfile.subscriptionTier}
+      />
+
+      {/* Интерактивный микро-тур онбординга */}
+      <OnboardingTourModal
+        isOpen={isOnboardingOpen}
+        onClose={handleCloseOnboarding}
+        onNavigateTab={(tab) => {
+          setActiveTab(tab);
+        }}
       />
     </div>
   );
