@@ -112,4 +112,7 @@ export interface UserProfile {
   notificationsEnabled?: boolean;
   telegramId?: number;
   telegramUsername?: string;
+  email?: string;
+  authUserId?: string;
+  authProvider?: 'supabase' | 'telegram' | 'guest';
 }

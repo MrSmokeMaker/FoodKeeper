@@ -142,6 +142,7 @@ export const RecipesScreen = ({
 
     try {
       const parsed = await parseRecipeFromWeb(importInput.trim(), {
+        apiKey: profile.geminiApiKey,
         proxyUrl: profile.geminiProxyUrl,
       });
 

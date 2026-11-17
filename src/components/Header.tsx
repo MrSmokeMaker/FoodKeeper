@@ -1,5 +1,5 @@
 import React from 'react';
-import { Moon, Sun, Settings2, Zap, ShoppingCart } from 'lucide-react';
+import { Moon, Sun, Settings2, Zap, ShoppingCart, User } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 import { Logo } from './Logo';
@@ -8,6 +8,7 @@ interface HeaderProps {
   profile?: UserProfile;
   onOpenSettings: () => void;
   onOpenPaywall: () => void;
+  onOpenAuth?: () => void;
   onToggleTheme: () => void;
   onOpenShopping?: () => void;
   shoppingPendingCount?: number;
@@ -18,12 +19,14 @@ export const Header: React.FC<HeaderProps> = ({
   profile,
   onOpenSettings,
   onOpenPaywall,
+  onOpenAuth,
   onToggleTheme,
   onOpenShopping,
   shoppingPendingCount = 0,
   isDark,
 }) => {
   const isPro = profile?.subscriptionTier === 'pro';
+  const isAuth = Boolean(profile?.authUserId);
 
   return (
     <header className="sticky top-0 z-30 safe-top glass border-b border-zinc-200/50 dark:border-white/[0.06] transition-colors">
@@ -83,6 +86,33 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 bg-emerald-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
                   {shoppingPendingCount}
                 </span>
+              )}
+            </button>
+          )}
+
+          {/* Кнопка аккаунта / авторизации */}
+          {onOpenAuth && (
+            <button
+              onClick={() => {
+                triggerHaptic('light');
+                onOpenAuth();
+              }}
+              className={`relative w-8 h-8 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                isAuth
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800/80'
+              }`}
+              aria-label={isAuth ? 'Профиль пользователя' : 'Войти в аккаунт'}
+            >
+              {isAuth ? (
+                <span className="text-xs font-bold uppercase">
+                  {profile?.name?.charAt(0) || 'U'}
+                </span>
+              ) : (
+                <User className="w-4 h-4" />
+              )}
+              {isAuth && (
+                <span className="absolute bottom-0 right-0 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-zinc-900" />
               )}
             </button>
           )}

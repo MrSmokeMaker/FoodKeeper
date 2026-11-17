@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Target, Calculator, Check, Zap, Globe, Bell, ShieldAlert, Utensils } from 'lucide-react';
+import { X, Target, Calculator, Check, Zap, Globe, Bell, ShieldAlert, Utensils, User, LogIn } from 'lucide-react';
 import type { UserProfile } from '../types';
 import { triggerHaptic } from '../services/telegram';
 import { requestNotificationPermission, isNotificationSupported } from '../services/notifications';
@@ -10,6 +10,7 @@ interface SettingsModalProps {
   profile?: UserProfile;
   onSaveProfile: (updated: Partial<UserProfile>) => Promise<void>;
   onOpenPaywall: () => void;
+  onOpenAuth?: () => void;
 }
 
 export const SettingsModal = ({
@@ -18,9 +19,8 @@ export const SettingsModal = ({
   profile,
   onSaveProfile,
   onOpenPaywall,
+  onOpenAuth,
 }: SettingsModalProps) => {
-  if (!isOpen) return null;
-
   const [name, setName] = useState(profile?.name || '');
   const [proxyUrl, setProxyUrl] = useState(profile?.geminiProxyUrl || '');
   const [apiKey, setApiKey] = useState(profile?.geminiApiKey || '');
@@ -51,6 +51,8 @@ export const SettingsModal = ({
   const [height, setHeight] = useState(178);
   const [activity, setActivity] = useState(1.375);
   const [goal, setGoal] = useState<'cut' | 'maintain' | 'bulk'>('cut');
+
+  if (!isOpen) return null;
 
   const isPro = profile?.subscriptionTier === 'pro';
 
@@ -176,6 +178,59 @@ export const SettingsModal = ({
             >
               {isPro ? 'О тарифе' : '499 ₽/мес'}
             </button>
+          </div>
+
+          {/* Блок Аккаунта / Авторизации */}
+          <div className="p-3.5 rounded-2xl bg-zinc-50 dark:bg-zinc-800/50 border border-zinc-200/80 dark:border-white/5 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  profile?.authUserId
+                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                    : 'bg-zinc-200 dark:bg-zinc-700 text-zinc-500'
+                }`}
+              >
+                <User className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-white">
+                    {profile?.authUserId ? profile?.name || 'Аккаунт FoodKeeper' : 'Гостевой режим'}
+                  </span>
+                  {profile?.authUserId && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  )}
+                </div>
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate max-w-[180px]">
+                  {profile?.email || (profile?.authUserId ? 'В сети' : 'Офлайн / без аккаунта')}
+                </p>
+              </div>
+            </div>
+
+            {onOpenAuth && (
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic('light');
+                  onClose();
+                  onOpenAuth();
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all active:scale-95 flex items-center gap-1.5 ${
+                  profile?.authUserId
+                    ? 'bg-zinc-200 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-600'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-xs'
+                }`}
+              >
+                {profile?.authUserId ? (
+                  <span>Управление</span>
+                ) : (
+                  <>
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Войти</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           {/* Имя */}

@@ -32,15 +32,16 @@ export const ScannerScreen = ({
 
   // Распознанные параметры (Вес, КБЖУ, Калории, Категория, Срок годности)
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('dairy');
+  const [category, setCategory] = useState('other');
   const [customCategory, setCustomCategory] = useState('');
-  const [quantity, setQuantity] = useState(250);
+  const [quantity, setQuantity] = useState(100);
   const [unit, setUnit] = useState<'г' | 'кг' | 'мл' | 'л' | 'шт'>('г');
-  const [calories, setCalories] = useState(70);
-  const [protein, setProtein] = useState(8);
-  const [fat, setFat] = useState(2);
-  const [carbs, setCarbs] = useState(4);
+  const [calories, setCalories] = useState(0);
+  const [protein, setProtein] = useState(0);
+  const [fat, setFat] = useState(0);
+  const [carbs, setCarbs] = useState(0);
   const [expiryDate, setExpiryDate] = useState('');
+  const [manualBarcodeInput, setManualBarcodeInput] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -171,6 +172,7 @@ export const ScannerScreen = ({
 
     try {
       const result = await parseProductLabel(base64, {
+        apiKey: profile.geminiApiKey,
         proxyUrl: profile.geminiProxyUrl,
       });
 
@@ -180,6 +182,41 @@ export const ScannerScreen = ({
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Ошибка распознавания этикетки.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleManualBarcodeLookup = async () => {
+    const code = manualBarcodeInput.trim().replace(/\D/g, '');
+    if (code.length < 6) {
+      setError('Введите корректный штрихкод (не менее 6 цифр).');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    setBarcodeResult(code);
+    try {
+      const allProducts = await db.products.toArray();
+      const localMatch = allProducts.find((p) => p.barcode === code);
+      if (localMatch) {
+        await populateFromProduct(localMatch);
+        setDetectedSource('local');
+        triggerHaptic('success');
+        return;
+      }
+
+      const offMatch = await lookupBarcodeInOpenFoodFacts(code);
+      if (offMatch) {
+        await populateFromProduct(offMatch);
+        setDetectedSource('openfoodfacts');
+        triggerHaptic('success');
+        return;
+      }
+
+      setError(`Товар со штрихкодом ${code} не найден в базе Open Food Facts. Заполните поля вручную.`);
+    } catch {
+      setError('Ошибка при поиске по штрихкоду.');
     } finally {
       setLoading(false);
     }
@@ -345,6 +382,26 @@ export const ScannerScreen = ({
         />
       </div>
 
+      {/* Ручной ввод штрихкода при необходимости */}
+      <div className="flex items-center gap-2 p-2 rounded-2xl bg-zinc-100 dark:bg-zinc-800/60 border border-zinc-200/50 dark:border-white/5">
+        <Barcode className="w-4 h-4 text-zinc-400 ml-1 shrink-0" />
+        <input
+          type="text"
+          value={manualBarcodeInput}
+          onChange={(e) => setManualBarcodeInput(e.target.value)}
+          placeholder="Или введите цифры штрихкода..."
+          className="bg-transparent border-0 text-xs flex-1 focus:outline-none text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400"
+          onKeyDown={(e) => e.key === 'Enter' && handleManualBarcodeLookup()}
+        />
+        <button
+          onClick={handleManualBarcodeLookup}
+          disabled={loading || !manualBarcodeInput.trim()}
+          className="px-3 py-1.5 rounded-xl bg-zinc-200 dark:bg-zinc-700 text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-emerald-600 hover:text-white transition-all disabled:opacity-50"
+        >
+          Найти
+        </button>
+      </div>
+
       {error && (
         <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-start gap-2 text-rose-500 text-xs">
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -353,7 +410,7 @@ export const ScannerScreen = ({
       )}
 
       {/* Форма подтверждения с обязательными параметрами: Вес, КБЖУ, Калории, Срок годности */}
-      {(image || name) && (
+      {(image || name || barcodeResult) && (
         <div className="glass-card rounded-3xl p-4 space-y-3 animate-fade-in shadow-sm">
           <div className="flex items-center justify-between border-b border-zinc-100 dark:border-white/5 pb-2">
             <span className="text-xs font-bold text-zinc-800 dark:text-zinc-200 flex items-center gap-1.5">

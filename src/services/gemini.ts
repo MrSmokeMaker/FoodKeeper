@@ -108,18 +108,9 @@ export async function parseProductLabel(
 ): Promise<Partial<Product>> {
   const activeKey = getEffectiveApiKey(options.apiKey);
   if (!activeKey) {
-    await new Promise((r) => setTimeout(r, 1200));
-    return {
-      name: 'Греческий йогурт Teos 2%',
-      category: 'dairy',
-      quantity: 140,
-      unit: 'г',
-      calories: 70,
-      protein: 8.0,
-      fat: 2.0,
-      carbs: 4.2,
-      expiryDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
-    };
+    throw new Error(
+      'API-ключ Gemini не настроен. Укажите ключ в Настройках для распознавания фото или заполните данные продукта вручную.'
+    );
   }
 
   const prompt = `
@@ -173,34 +164,9 @@ export async function parseRecipeFromWeb(
 ): Promise<Omit<Recipe, 'id' | 'createdAt'>> {
   const activeKey = getEffectiveApiKey(options.apiKey);
   if (!activeKey) {
-    await new Promise((r) => setTimeout(r, 1200));
-    return {
-      title: 'Паста с лососем и брокколи в нежном сливочном соусе',
-      description: 'Импортировано из открытой кулинарной библиотеки: ресторанное блюдо с балансом Омега-3 и медленных углеводов.',
-      prepTimeMinutes: 25,
-      servings: 2,
-      calories: 520,
-      protein: 34,
-      fat: 16,
-      carbs: 60,
-      category: 'lunch',
-      importedFromWeb: true,
-      sourceUrl: input.startsWith('http') ? input : undefined,
-      ingredients: [
-        { name: 'Лосось свежий (филе)', amount: 250, unit: 'г', category: 'Рыба и морепродукты' },
-        { name: 'Паста из твердых сортов', amount: 150, unit: 'г', category: 'Крупы и макароны' },
-        { name: 'Брокколи свежая', amount: 150, unit: 'г', category: 'Овощи и зелень' },
-        { name: 'Сливки 10%', amount: 100, unit: 'мл', category: 'Молочные продукты' },
-        { name: 'Оливковое масло', amount: 10, unit: 'мл', category: 'Специи и соусы' },
-        { name: 'Чеснок и морская соль', amount: 5, unit: 'г', category: 'Специи и соусы' },
-      ],
-      instructions: [
-        'Отварить 150г пасты в подсоленной воде 8 минут до аль денте, за 3 минуты до готовности опустить соцветия брокколи (150г).',
-        'Филе лосося (250г) нарезать средними кубиками и обжарить на 10мл оливкового масла 3-4 минуты.',
-        'Влить 100мл сливок 10%, добавить измельченный зубчик чеснока и томить соус 2 минуты до лёгкого загустения.',
-        'Смешать пасту и брокколи со сливочным соусом и лососем, поперчить и подавать горячим.',
-      ],
-    };
+    throw new Error(
+      'API-ключ Gemini не настроен. Укажите ключ в Настройках для импорта рецептов через ИИ.'
+    );
   }
 
   const prompt = `

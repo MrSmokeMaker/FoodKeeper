@@ -7,6 +7,7 @@ import { Navbar, type TabType } from './components/Navbar';
 import { Header } from './components/Header';
 import { SettingsModal } from './components/SettingsModal';
 import { PaywallModal } from './components/PaywallModal';
+import { AuthModal } from './components/AuthModal';
 import { DashboardScreen } from './components/DashboardScreen';
 import { PlannerScreen } from './components/PlannerScreen';
 import { FridgeScreen } from './components/FridgeScreen';
@@ -30,11 +31,13 @@ import {
   type DeductionItem,
   type MissingIngredientItem,
 } from './services/inventory';
+import { supabase, syncUserWithLocalDb, getCurrentAuthSession } from './services/auth';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isPaywallOpen, setIsPaywallOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
     const tg = initTelegramApp();
     return getInitialTheme(tg.colorScheme) === 'dark';
@@ -57,6 +60,25 @@ export function App() {
         }
       });
     }
+
+    // Синхронизация сессии Supabase Auth
+    getCurrentAuthSession().then(({ user }) => {
+      if (user) {
+        syncUserWithLocalDb(user);
+      }
+    });
+
+    const {
+      data: { subscription: authListener },
+    } = supabase.auth.onAuthStateChange(async (_event: string, session: any) => {
+      if (session?.user) {
+        await syncUserWithLocalDb(session.user);
+      }
+    });
+
+    return () => {
+      authListener.unsubscribe();
+    };
   }, []);
 
   // Синхронизация тёмной темы с HTML классом и хранилищем
@@ -320,6 +342,7 @@ export function App() {
         profile={currentProfile}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenPaywall={() => setIsPaywallOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
         onToggleTheme={() => setIsDark(!isDark)}
         onOpenShopping={() => {
           triggerHaptic('light');
@@ -447,6 +470,17 @@ export function App() {
           setIsSettingsOpen(false);
           setIsPaywallOpen(true);
         }}
+        onOpenAuth={() => {
+          setIsSettingsOpen(false);
+          setIsAuthOpen(true);
+        }}
+      />
+
+      {/* Модальное окно аутентификации */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        profile={currentProfile}
       />
 
       {/* Модальное окно тарифа PRO */}
